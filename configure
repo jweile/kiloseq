@@ -1,0 +1,28 @@
+
+configFile="bins.cfg"
+rm $configFile
+
+function check {
+	bin="$1"
+	ver="$2"
+	verOpt=${3:---version}
+	binPath=`which $bin`
+	if [[ `$binPath $verOpt 2>&1` =~ $ver ]]; then
+		echo "$bin has been verified!"
+		echo "$bin,$binPath">>$configFile
+	else
+		echo "No compatible version of $bin found. Please enter path:"
+		read binPath
+		if [[ `$binPath $verOpt 2>&1` =~ $ver ]]; then
+			echo "$bin has been verified!"
+			echo "$bin,$binPath">>$configFile
+		else
+			echo "ERROR: No compatible version of $bin found!"
+			exit 1
+		fi
+	fi
+}
+
+check Rscript "version 3"
+check blastn "blastn: 2.2" "-version"
+check qstat "SGE 6|OGS/GE 2011" "-help"
