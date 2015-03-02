@@ -7,7 +7,7 @@
 # It also tries to find the position of the barcode with in the 
 # tag read and extracts the barcode sequence, adding to the bin.
 # 
-# Written by Jochen Weile <jochenweile@gmail.com> and Anjali Gopal <anjali.gopal91@gmai.com>
+# Written by Jochen Weile <jochenweile@gmail.com> and Anjali Gopal <anjali.gopal91@gmail.com>
 
 library("Biostrings")
 
@@ -39,37 +39,6 @@ logger <- new.logger(log.file)
 #Load sequences
 r1.seq <- read.DNAStringSet(r1.file)
 r2.seq <- read.DNAStringSet(r2.file)
-
-###
-# Function to *locally* excise regex groups from string vectors.
-# I.e. only extract the first occurrence of each group within each string.
-# x = string vector
-# re = regular expression with groups
-#
-extract.groups <- function(x, re) {
-	matches <- regexpr(re,x,perl=TRUE)
-	start <- attr(matches,"capture.start")
-	end <- start + attr(matches,"capture.length") - 1
-	do.call(cbind,lapply(1:ncol(start), function(i) {
-		sapply(1:nrow(start),function(j){
-			if (start[j,i] > -1) substr(x[[j]],start[j,i],end[j,i]) else NA
-		})
-	}))
-}
-###
-# Function to *globally* excise regex groups from string vectors.
-# x = string vector
-# re = regular expression with groups
-#
-global.extract.groups <- function(x,re) {
-	all.matches <- gregexpr(re,x,perl=TRUE)
-	mapply(function(matches,x) {
-		start <- attr(matches,"capture.start")
-		end <- start + attr(matches,"capture.length") - 1
-		apply(zbind(start,end),c(1,2),function(pos) substr(x,pos[[1]],pos[[2]]) )
-	},matches=all.matches,x=x)
-}
-
 
 #Run Bowtie on R2 file against welltag DB and extract well information
 logger$info("Aligning to well tags...")

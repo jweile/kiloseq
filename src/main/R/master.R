@@ -6,7 +6,7 @@
 # SGE cluster to process them. Afterwards it collates the results for
 # further processing.
 # 
-# Written by Jochen Weile <jochenweile@gmail.com> and Anjali Gopal <anjali.gopal91@gmai.com>
+# Written by Jochen Weile <jochenweile@gmail.com> and Anjali Gopal <anjali.gopal91@gmail.com>
 
 library("hash",warn.conflicts=FALSE,quietly=TRUE,verbose=FALSE)
 

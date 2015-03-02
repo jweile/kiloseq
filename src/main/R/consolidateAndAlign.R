@@ -5,7 +5,7 @@
 # It first consolidates the sorted reads from various demuxer, then aligns
 # them to the template
 # 
-# Written by Jochen Weile <jochenweile@gmail.com> and Anjali Gopal <anjali.gopal91@gmai.com>
+# Written by Jochen Weile <jochenweile@gmail.com> and Anjali Gopal <anjali.gopal91@gmail.com>
 
 source("lib/liblogging.R")   #Logger
 source("lib/cliargs.R")      #Command-line argument processing
