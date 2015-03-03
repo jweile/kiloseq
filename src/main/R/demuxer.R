@@ -9,11 +9,12 @@
 # 
 # Written by Jochen Weile <jochenweile@gmail.com> and Anjali Gopal <anjali.gopal91@gmail.com>
 
-library("Biostrings")
+# library("Biostrings")
 
 source("lib/liblogging.R")   #Logger
 source("lib/cliargs.R")      #Command-line argument processing
 source("lib/libyogitools.R") #Helper functions
+source("lib/libyogiseq.R")   #FASTQ and bowtie
 
 # R1 reads chunk file.
 r1.file <- getArg("r1",required=TRUE)
@@ -31,17 +32,40 @@ dntag.db <- getArg("dntags",default="res/dntags")
 # Turns on debug mode
 debug.mode <- as.logical(getArg("debug",default=FALSE))
 
-
 #Create logger
 log.file <- paste(dir.name,"demuxer_",job.id,".log",sep="")
 logger <- new.logger(log.file)
 
 #Load sequences
-r1.seq <- read.DNAStringSet(r1.file)
-r2.seq <- read.DNAStringSet(r2.file)
+read.fastq <- function(f) {
+	tryCatch({
+		con <- file(f, open="r")
+		p <- new.fastq.parser(con)
+		out <- list()
+		while (length(s <- p$parse.next(1)) > 0) {
+			out[[length(out)+1]] <- s
+		}
+		out
+	},
+	error = function(ex) {
+		logger$fatal(paste("Error reading file",f," :\n",ex))
+		stop(ex)
+	},
+	finally = {
+		if (exists("con") && isOpen(con)) {
+			close(con)
+		}
+	})
+}
 
-#Run Bowtie on R2 file against welltag DB and extract well information
+r1.seq <- read.fastq(r1.file)
+r2.seq <- read.fastq(r2.file)
+
+#####
+# STEP 1: Run Bowtie on R2 file against welltag DB and extract well information
+#####
 logger$info("Aligning to well tags...")
+#bowtie() function is defined in libyogitools.R
 welltag.sam <- bowtie(r2.file,welltag.db,debug.mode=debug.mode)
 #Extract Well info
 wells <- apply(
@@ -53,28 +77,58 @@ wells <- apply(
 )
 
 #####
-#TODO: Check that sam entries are in same order as fastq!
+#TODO: Make sure that sam entries are in same order as fastq!
 #####
 
-#Run Bowtie on R2 file against DNTAG site to find Barcodes
+#####
+# STEP 2: Run Bowtie on R2 file against DNTAG site to find Barcodes
+#####
 logger$info("Aligning to DN tags...")
 dntag.sam <- bowtie(r2.file,dntag.db,debug.mode=debug.mode)
 
 #CIGAR: S=Soft clip, H=Hard clip, N=Intron skip, M=Match, D=Deletion, I=Insertion, P=Padded
 cigar <- global.extract.groups(dntag.sam$cigar,"(\\d+)([SHNMDIP]{1})")
+#How many bases are clipped before the match?
+#The clipped bases should be the welltag and a bit of the loxP site.
 clip.width <- lapply(
 	cigar,
 	function(cigar) if (cigar[1,2]=="S") as.numeric(cigar[1,1]) else 0
 )
+#How long is the match in the read, including deletions?
 match.width <- lapply(
-	cigar, function(cigar) sum(as.numeric(cigar[1,!(cigar[,2] %in% c("D","S")) )))
+	cigar, function(cigar) sum(as.numeric(cigar[1,!(cigar[,2] %in% c("M","D")) )))
 )
-#Extract barcode sequences
-barcode.seq <- subseq(r2.seq,clip.width+1,clip.width+match.width)
+#the barcode starts at the end of the match
+bc.start <- clip.width+match.width+1
+#Extract barcode sequences. It's 25bp wide
+barcode.seq <- lapply(1:length(r2.seq), function(i) {
+	bc.end <- bc.start[[i]]+25-1
+	if (length(r2.seq[[i]] < bc.end)) bc.end <- length(r2.seq[[i]])
+	subseq(r2.seq[[i]],bc.start[[i]],bc.end)
+})
 
-####
-# SORT READS INTO WELLS
-#
+
+#Function for safely writing sequences
+write.fastq <- function(f,seqs) {
+	tryCatch({
+		con <- file(f, open="w")
+		writeFASTQ(con,seqs)
+	},
+	error = function(ex) {
+		logger$fatal(paste("Error while writing file",f," :\n",ex))
+		stop(ex)
+	},
+	finally = {
+		if (exists("con") && isOpen(con)) {
+			close(con)
+		}
+	})
+}
+
+
+#####
+# STEP 3: SORT READS INTO WELLS
+#####
 logger$info("Sorting reads into wells...")
 tapply(1:length(wells), wells, function(idx) {
 	well <- wells[[ idx[[1]] ]]
@@ -82,16 +136,17 @@ tapply(1:length(wells), wells, function(idx) {
 	if (!file.exists(sub.dir)) dir.create(sub.dir,showWarnings=FALSE)
 	r1.file <- paste(sub.dir,"R1_",job.id,".fastq",sep="")
 	r2.file <- paste(sub.dir,"R2_",job.id,".fastq",sep="")
-	bc.file <- paste(sub.dir,"BC_",job.id,".txt")
+	bc.file <- paste(sub.dir,"BC_",job.id,".fastq")
 
-	write.XStringSet(r1.seq[idx],r1.file,format="fastq")
-	write.XStringSet(r2.seq[idx],r2.file,format="fastq")
+	write.fastq(r1.file,r1.seq[idx])
+	write.fastq(r2.file,r2.seq[idx])
+	write.fastq(bc.file,barcode.seq[idx])
 })
 
 
-###
-# Delete input files when we're done, to save HD space.
-#
+#####
+# CLEANUP: Delete input files when we're done, to save HD space.
+####
 if (!debug.mode) {
 	logger$info("Cleaning up sequence fragments")
 	file.remove(r1.file)

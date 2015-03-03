@@ -92,44 +92,6 @@ global.extract.groups <- function(x,re) {
 }
 
 
-###
-# Function for safely running bowtie and retrieving results
-# TODO: Needs to be bowtie2 for local alignment!
-# fastq.file = FASTQ with query sequence
-# db.file = Location of bowtie reference DB
-#
-bowtie <- function(fastq.file, db.file, purge=TRUE, debug.mode=FALSE) {
-	sam.file <- sub("\\.fastq",".sam",fastq.file)
-	tryCatch(
-		exitCode <- system(paste(
-			"$BowtieBin",
-			db.file,
-			"-q",fastq.file,
-			"-S",sam.file,
-			"--sam-nohead"
-		)),
-		error=function(e) {
-			logger$fatal(e)
-			stop(e)
-		} 
-	)
-	if (exitCode != 0) {
-		e <- simpleError("Error executing Bowtie!")
-		logger$fatal(e)
-		stop(e)
-	}
-	sam <- read.delim(sam.file,header=FALSE,stringsAsFactors=FALSE)
-	colnames(sam) <- c(
-		"cname","flag","rname","pos","mapq","cigar","mrnm","mpos",
-		"isize","seq","qual","tags"
-	)
-	if(purge && !debug.mode) {
-		file.remove(sam.file)
-	}
-	sam
-}
-
-
 #Function for returning the i'th ranked item in a list
 ith.rank <- function(values, i) sort(values,decreasing=TRUE)[i]
 

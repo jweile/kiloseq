@@ -28,11 +28,22 @@ debug.mode <- as.logical(getArg("debug",default=FALSE))
 log.file <- paste(dir.name,"consolidator_",job.id,".log",sep="")
 logger <- new.logger(log.file)
 
-#Consolidate results
+#####
+# STEP 1: Consolidate results
+#####
 system(paste("cat ",dir.name,"R1_*.fastq>",dir.name,"R1.fastq&&rm R1_*.fastq",sep=""))
 system(paste("cat ",dir.name,"R2_*.fastq>",dir.name,"R2.fastq&&rm R2_*.fastq",sep=""))
-system(paste("cat ",dir.name,"BC_*.txt>",dir.name,"BC.txt&&rm BC_*.txt",sep=""))
+system(paste("cat ",dir.name,"BC_*.fastq>",dir.name,"BC.fastq&&rm BC_*.fastq",sep=""))
 
 r1.file <- paste(dir.name,"R1.fastq",sep="")
+r2.file <- paste(dir.name,"R2.fastq",sep="")
+bc.file <- paste(dir.name,"BC.fastq",sep="")
 
+#####
+# STEP 2: Align to ORFs
+#####
 orf.sam <- bowtie(r1.file, orf.db, purge=FALSE, debug.mode=debug.mode)
+
+#####
+# STEP 3: Assemble the barcode
+#####
