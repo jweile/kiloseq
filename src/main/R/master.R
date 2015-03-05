@@ -11,7 +11,6 @@
 library("hash",warn.conflicts=FALSE,quietly=TRUE,verbose=FALSE)
 
 source("lib/sge2.R")         #SUN Grid Engine
-source("lib/scorer.R")       #Scoring methods
 source("lib/cliargs.R")      #Command-line argument processing
 source("lib/liblogging.R")   #Writing log files
 source("lib/libyogitools.R") #Some handy tools
@@ -30,7 +29,7 @@ rfile.table <- cbind(r1=strsplit(r1.files,",")[[1]],r2=strsplit(r2.files,",")[[1
 
 
 # The session tag is used to name the ouptut directory together with a timestamp.
-session.tag <- getArg("session",default="bfgy2h")
+session.tag <- getArg("session",default="kiloseq")
 
 # The chuck size determines how many reads are processed by each slave script.
 chunk.size <- as.numeric(getArg("chunksize",default=20000))
