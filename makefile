@@ -40,12 +40,12 @@ stable:
 _build: 
 	#create build directory
 	mkdir -p kiloseq/lib/
-	mkdir -p kiloseq/html/
+	# mkdir -p kiloseq/html/
 	mkdir -p kiloseq/res/
 	#copy code into dir structure
 	cp src/main/R/* kiloseq/lib/
 	cp src/main/resources/* kiloseq/res/
-	cp src/main/html/* kiloseq/html/
+	# cp src/main/html/* kiloseq/html/
 	cp src/main/bash/* kiloseq/
 	#interpolate binary locations
 	src/make/interpolate.sh bins.cfg kiloseq/
@@ -66,7 +66,7 @@ install:
 	$(eval R=`grep Rscript bins.cfg|cut -d, -f2`)
 	$(R) src/make/install_dependencies.R
 	unzip kiloseq_$(NOW).zip -d $${HOME}
-	mkdir -p $${HOME}/www/html/
-	if ! [ -h $${HOME}/www/html/kiloseq ]; then \
-		ln -s $${HOME}/kiloseq/ $${HOME}/www/html/;\
-	fi
+	# mkdir -p $${HOME}/www/html/
+	# if ! [ -h $${HOME}/www/html/kiloseq ]; then \
+	# 	ln -s $${HOME}/kiloseq/ $${HOME}/www/html/;\
+	# fi
