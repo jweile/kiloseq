@@ -109,7 +109,7 @@ result.dirs <- apply(rfile.table, 1, function(rfiles) {
 	r2.file <- rfiles[["r2"]]
 
 	#TODO: name directory according to SWIM well
-	dir.name <- paste(out.dir,"/",gsub(".+/|\\..+$","",r1.file),"/",sep="")
+	dir.name <- paste(out.dir,gsub(".+/|\\.fastq(\\.gz)?$","",r1.file),"/",sep="")
 	dir.create(dir.name)
 
 	###

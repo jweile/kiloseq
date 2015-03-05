@@ -60,6 +60,7 @@ read.fastq <- function(f) {
 
 seqnames <- function(seqs) sapply(seqs,function(s)s$getID())
 
+logger$info("Loading sequence data...")
 r1.seq <- read.fastq(r1.file)
 r2.seq <- read.fastq(r2.file)
 
@@ -144,11 +145,11 @@ write.fastq <- function(f,seqs) {
 logger$info("Sorting reads into wells...")
 tapply(1:length(wells), wells, function(idx) {
 	well <- wells[[ idx[[1]] ]]
-	sub.dir <- paste(dir.name,well,sep="")
+	sub.dir <- paste(dir.name,well,"/",sep="")
 	if (!file.exists(sub.dir)) dir.create(sub.dir,showWarnings=FALSE)
 	r1.file <- paste(sub.dir,"R1_",job.id,".fastq",sep="")
 	r2.file <- paste(sub.dir,"R2_",job.id,".fastq",sep="")
-	bc.file <- paste(sub.dir,"BC_",job.id,".fastq")
+	bc.file <- paste(sub.dir,"BC_",job.id,".fastq",sep="")
 
 	barcodes <- barcode.seq[idx]
 	barcodes <- barcodes[!is.na(barcodes)]
