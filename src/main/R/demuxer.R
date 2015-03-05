@@ -43,7 +43,7 @@ read.fastq <- function(f) {
 		p <- new.fastq.parser(con)
 		out <- list()
 		while (length(s <- p$parse.next(1)) > 0) {
-			out[[length(out)+1]] <- s
+			out[[length(out)+1]] <- s[[1]]
 		}
 		out
 	},
@@ -58,15 +58,22 @@ read.fastq <- function(f) {
 	})
 }
 
+seqnames <- function(seqs) sapply(seqs,function(s)s$getID())
+
 r1.seq <- read.fastq(r1.file)
 r2.seq <- read.fastq(r2.file)
+
+if (!all(seqnames(r1.seq)==seqnames(r2.seq))) {
+	logger$fatal("R1 and R2 reads do not correspond to each other!")
+	stop()
+}
 
 #####
 # STEP 1: Run Bowtie on R2 file against welltag DB and extract well information
 #####
 logger$info("Aligning to well tags...")
 #bowtie() function is defined in libyogitools.R
-welltag.sam <- bowtie(r2.file,welltag.db,debug.mode=debug.mode)
+welltag.sam <- bowtie(r2.file,welltag.db,clip3=47,debug.mode=debug.mode)
 #Extract Well info
 wells <- apply(
 	extract.groups(welltag.sam$rname,"SET_ID=(\\w{1})\\|WELL=(\\w{1}\\d{2})"), 
@@ -76,36 +83,41 @@ wells <- apply(
 	}
 )
 
-#####
-#TODO: Make sure that sam entries are in same order as fastq!
-#####
+read.order <- sapply(seqnames(r2.seq), function(name) which(welltag.sam$cname == name))
+wells <- wells[read.order]
 
 #####
 # STEP 2: Run Bowtie on R2 file against DNTAG site to find Barcodes
 #####
-logger$info("Aligning to DN tags...")
-dntag.sam <- bowtie(r2.file,dntag.db,debug.mode=debug.mode)
+dntag.snippet <- "TAGTGCGATTG"
+seqs <- sapply(r2.seq,function(s)s$toString())
+barcode.seq <- mapply(function(m,s) {
+	if (m > 0) subseq(s,m+11,length(s)) else NA
+},m=regexpr(dntag.snippet, seqs),s=r2.seq)
 
-#CIGAR: S=Soft clip, H=Hard clip, N=Intron skip, M=Match, D=Deletion, I=Insertion, P=Padded
-cigar <- global.extract.groups(dntag.sam$cigar,"(\\d+)([SHNMDIP]{1})")
-#How many bases are clipped before the match?
-#The clipped bases should be the welltag and a bit of the loxP site.
-clip.width <- lapply(
-	cigar,
-	function(cigar) if (cigar[1,2]=="S") as.numeric(cigar[1,1]) else 0
-)
-#How long is the match in the read, including deletions?
-match.width <- lapply(
-	cigar, function(cigar) sum(as.numeric(cigar[1,!(cigar[,2] %in% c("M","D")) )))
-)
-#the barcode starts at the end of the match
-bc.start <- clip.width+match.width+1
-#Extract barcode sequences. It's 25bp wide
-barcode.seq <- lapply(1:length(r2.seq), function(i) {
-	bc.end <- bc.start[[i]]+25-1
-	if (length(r2.seq[[i]] < bc.end)) bc.end <- length(r2.seq[[i]])
-	subseq(r2.seq[[i]],bc.start[[i]],bc.end)
-})
+# logger$info("Aligning to DN tags...")
+# dntag.sam <- bowtie(r2.file,dntag.db,debug.mode=debug.mode)
+
+# #CIGAR: S=Soft clip, H=Hard clip, N=Intron skip, M=Match, D=Deletion, I=Insertion, P=Padded
+# cigar <- global.extract.groups(dntag.sam$cigar,"(\\d+)([SHNMDIP]{1})")
+# #How many bases are clipped before the match?
+# #The clipped bases should be the welltag and a bit of the loxP site.
+# clip.width <- lapply(
+# 	cigar,
+# 	function(cigar) if (cigar[1,2]=="S") as.numeric(cigar[1,1]) else 0
+# )
+# #How long is the match in the read, including deletions?
+# match.width <- lapply(
+# 	cigar, function(cigar) sum(as.numeric(cigar[1,!(cigar[,2] %in% c("M","D")) )))
+# )
+# #the barcode starts at the end of the match
+# bc.start <- clip.width+match.width+1
+# #Extract barcode sequences. It's 25bp wide
+# barcode.seq <- lapply(1:length(r2.seq), function(i) {
+# 	bc.end <- bc.start[[i]]+25-1
+# 	if (length(r2.seq[[i]] < bc.end)) bc.end <- length(r2.seq[[i]])
+# 	subseq(r2.seq[[i]],bc.start[[i]],bc.end)
+# })
 
 
 #Function for safely writing sequences
@@ -138,9 +150,12 @@ tapply(1:length(wells), wells, function(idx) {
 	r2.file <- paste(sub.dir,"R2_",job.id,".fastq",sep="")
 	bc.file <- paste(sub.dir,"BC_",job.id,".fastq")
 
+	barcodes <- barcode.seq[idx]
+	barcodes <- barcodes[!is.na(barcodes)]
+
 	write.fastq(r1.file,r1.seq[idx])
 	write.fastq(r2.file,r2.seq[idx])
-	write.fastq(bc.file,barcode.seq[idx])
+	write.fastq(bc.file,barcodes)
 })
 
 

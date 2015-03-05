@@ -405,15 +405,22 @@ init.translator <- function(ctable.file="codontable.txt") {
 # fastq.file = FASTQ with query sequence
 # db.file = Location of bowtie reference DB
 #
-bowtie <- function(fastq.file, db.file, purge=TRUE, debug.mode=FALSE) {
+bowtie <- function(fastq.file, db.file, 
+	clip3=0, clip5=0, 
+	purge=TRUE, debug.mode=FALSE) {
+
 	sam.file <- sub("\\.fastq",".sam",fastq.file)
 	tryCatch(
 		exitCode <- system(paste(
+			#/home/rothlab/jweile/bin/bowtie2
 			"$BowtieBin",
-			db.file,
-			"-q",fastq.file,
-			"-S",sam.file,
-			"--sam-nohead"
+			ifelse(clip3>0,paste("-3",clip3),""),
+			ifelse(clip5>0,paste("-5",clip5),""),
+			"-L 4 -N 1 -i C,1 --score-min C,0",
+			"--local --no-head",
+			"-x",db.file,
+			"-U",fastq.file,
+			"-S",sam.file
 		)),
 		error=function(e) {
 			logger$fatal(e)
