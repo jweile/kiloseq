@@ -80,10 +80,18 @@ wells <- apply(
 	extract.groups(welltag.sam$rname,"SET_ID=(\\w{1})\\|WELL=(\\w{1}\\d{2})"), 
 	1, 
 	function(groups) {
-		if (!any(is.na(groups))) paste(groups,collapse="_") else NA
+		# if (!any(is.na(groups))) paste(groups,collapse="_") else NA
+		if (any(is.na(groups))) {
+			"undetermined"
+		} else if (!(groups[[1]] %in% LETTERS[1:4])) {
+			"invalid"
+		} else {
+			paste(groups,collapse="_")
+		}
 	}
 )
 
+#sort wells according to order in R2 file
 read.order <- sapply(seqnames(r2.seq), function(name) which(welltag.sam$cname == name))
 wells <- wells[read.order]
 

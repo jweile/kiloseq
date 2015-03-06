@@ -101,6 +101,8 @@ is.gz <- function(f) {
 # Construct SunGridEngine object with designated maximum queue size.
 sge <- new.sge(max.queue.length=max.queue, logger=logger, debug=debug.mode)
 
+logger$info("Demultiplexing...")
+
 #Iterate over all SWIM wells, create chunks and submit jobs on the go.
 #The return result directories.
 result.dirs <- apply(rfile.table, 1, function(rfiles) {
@@ -170,7 +172,9 @@ sge$wait(verbose=TRUE)
 ####
 # PHASE 2: CONSOLIDATE JOB RESULTS AND ALIGN
 #
-lapply(result.dirs, function(dir.name) {
+logger$info("Consolidating and aligning...")
+
+invisible(lapply(result.dirs, function(dir.name) {
 
 	sub.dirs <- list.dirs(dir.name)
 
@@ -178,7 +182,11 @@ lapply(result.dirs, function(dir.name) {
 
 		swim.id <- gsub(".*/","",sub("/$","",dir.name))
 		well.id <- gsub(".*/","",sub.dir)
-		job.id <- paste("consolidate",swim.id,well.id,sep="")
+		#ignore "undetermined" and "invalid" folders
+		if (regexpr("[A-D]_\\w\\d{2}",well.id) < 0) {
+			return(NULL)
+		}
+		job.id <- paste("consolidate",swim.id,well.id,sep="_")
 
 		#Submit job to Sun Grid Engine
 		sge$enqueue(
@@ -193,7 +201,7 @@ lapply(result.dirs, function(dir.name) {
 			)
 		)
 	})
-})
+}))
 #Wait for the remaining jobs to finish
 sge$wait(verbose=TRUE)
 
