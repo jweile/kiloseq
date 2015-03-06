@@ -178,7 +178,7 @@ lapply(result.dirs, function(dir.name) {
 
 		swim.id <- gsub(".*/","",sub("/$","",dir.name))
 		well.id <- gsub(".*/","",sub.dir)
-		job.id <- paste("consolidate",swim.id,well.id)
+		job.id <- paste("consolidate",swim.id,well.id,sep="")
 
 		#Submit job to Sun Grid Engine
 		sge$enqueue(

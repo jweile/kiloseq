@@ -88,7 +88,7 @@ read.order <- sapply(seqnames(r2.seq), function(name) which(welltag.sam$cname ==
 wells <- wells[read.order]
 
 #####
-# STEP 2: Run Bowtie on R2 file against DNTAG site to find Barcodes
+# STEP 2: Extract Barcodes
 #####
 dntag.snippet <- "TAGTGCGATTG"
 seqs <- sapply(r2.seq,function(s)s$toString())
