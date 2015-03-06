@@ -10,6 +10,7 @@
 source("lib/liblogging.R")   #Logger
 source("lib/cliargs.R")      #Command-line argument processing
 source("lib/libyogitools.R") #Helper functions
+source("lib/libyogiseq.R")
 
 # Working directory
 dir.name <- getArg("dir",required=TRUE)
