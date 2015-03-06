@@ -163,3 +163,25 @@ combo <- function(l) {
 	}))
 }
 
+
+###
+# This object can be used to create cluster maps
+#
+new.cluster.map <- function(n) {
+	
+	.clusters <- as.list(1:n)
+
+	.getIdx <- function(i) which(sapply(.clusters,function(x) i %in% x))
+
+	addLink <- function(i,j) {
+		i.idx <- .getIdx(i)
+		j.idx <- .getIdx(j)
+		joint <- union(.clusters[[i.idx]],.clusters[[j.idx]])
+		.clusters[c(i.idx,j.idx)] <<- NULL
+		.clusters[[length(.clusters)+1]] <<- joint
+	}
+
+	getClusters <- function() .clusters
+
+	list(addLink=addLink, getClusters=getClusters)
+}

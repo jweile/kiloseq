@@ -27,7 +27,7 @@ job.id <- getArg("id",required=TRUE)
 # Location of well tag DB
 welltag.db <- getArg("welltags",default="res/welltags")
 # Location of DNTAG DB
-dntag.db <- getArg("dntags",default="res/dntags")
+# dntag.db <- getArg("dntags",default="res/dntags")
 
 # Turns on debug mode
 debug.mode <- as.logical(getArg("debug",default=FALSE))
@@ -156,7 +156,9 @@ tapply(1:length(wells), wells, function(idx) {
 
 	write.fastq(r1.file,r1.seq[idx])
 	write.fastq(r2.file,r2.seq[idx])
-	write.fastq(bc.file,barcodes)
+	if (length(barcodes) > 0) {
+		write.fastq(bc.file,barcodes)
+	}
 })
 
 
