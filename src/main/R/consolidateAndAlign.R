@@ -157,7 +157,7 @@ segregated.r1.files <- sapply(1:nrow(top.clusters), function(i) {
 #####
 logger$info("Aligning reads to ORF...")
 
-ref.con <- file(ref.file,open="r")
+ref.con <- file(orf.fa,open="r")
 ref.seq <- readFASTA(ref.con)[[1]]
 close(ref.con)
 
@@ -183,7 +183,7 @@ calls <- sapply(segregated.r1.files, function(r1.file) {
 	}
 	#TODO: Exctract significant SNPs and translate!
 	return("Good!")
-}))
+})
 
 top.clusters[,"call"] <- calls
 
