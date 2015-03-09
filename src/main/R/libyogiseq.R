@@ -454,12 +454,12 @@ call.variants <- function(sam.file, ref.file) {
 		exitCode <- system(paste(
 			"$SAMtoolsBin view -b -S",sam.file,"|",
 			"$SAMtoolsBin sort -o - - |",
-			"$SAMtoolsBin mpileup -f ",ref.file," - |",
+			"$SAMtoolsBin mpileup -g -f",ref.file,"- |",
 			"$BCFtoolsBin view -c - >",
 			vcf.file
 		))
 		if (exitCode != 0) {
-			stop("Error executing Bowtie!")
+			stop("Error executing SAMtools!")
 		}
 	},
 	error=function(e) {
