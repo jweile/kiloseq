@@ -161,12 +161,23 @@ ref.con <- file(orf.fa,open="r")
 ref.seq <- readFASTA(ref.con)[[1]]
 close(ref.con)
 
-calls <- sapply(segregated.r1.files, function(r1.file) {
+out <- do.call(rbind,lapply(segregated.r1.files, function(r1.file) {
+
 	#Alignment
 	sam.file <- bowtie(r1.file, orf.db, 
 		purge=FALSE, parse=FALSE, header=TRUE, short=FALSE,
 		debug.mode=debug.mode
 	)
+	sam <- read.delim(sam.file,stringsAsFactors=FALSE,comment.char="@",header=FALSE)
+	colnames(sam) <- c(
+		"cname","flag","rname","pos","mapq","cigar","mrnm","mpos",
+		"isize","seq","qual","tags"
+	)
+	al.rate <- 1-(sum(sam$rname == "*")/nrow(sam))
+	if (al.rate == 0) {
+		return(list(call="No alignment!",al.rate=al.rate))
+	}
+
 	#Variant Caller
 	vcf <- call.variants(sam.file,orf.fa)
 	#Process results
@@ -179,13 +190,14 @@ calls <- sapply(segregated.r1.files, function(r1.file) {
 		}
 	})
 	if (sum(depth < 5) > 10) {
-		return("low coverage")
+		return(list(call="Low coverage!",al.rate=al.rate))
 	}
 	#TODO: Exctract significant SNPs and translate!
-	return("Good!")
-})
+	return(list(call="Good!",al.rate=al.rate))
+}))
 
-top.clusters[,"call"] <- calls
+top.clusters[,"al.rate"] <- unlist(out[,"al.rate"])
+top.clusters[,"call"] <- unlist(out[,"call"])
 
 write.table(
 	top.clusters,

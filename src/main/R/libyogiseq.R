@@ -449,7 +449,7 @@ bowtie <- function(fastq.file, db.file,
 }
 
 call.variants <- function(sam.file, ref.file) {
-	vcf.file <- sub(".sam$","vcf",sam.file)
+	vcf.file <- sub(".sam$",".vcf",sam.file)
 	tryCatch({
 		exitCode <- system(paste(
 			"$SAMtoolsBin view -b -S",sam.file,"|",
