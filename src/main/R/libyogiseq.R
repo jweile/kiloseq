@@ -406,7 +406,7 @@ init.translator <- function(ctable.file="codontable.txt") {
 # db.file = Location of bowtie reference DB
 #
 bowtie <- function(fastq.file, db.file, 
-	clip3=0, clip5=0, short=TRUE
+	clip3=0, clip5=0, short=TRUE,
 	purge=TRUE, debug.mode=FALSE, parse=TRUE, header=FALSE) {
 
 	sam.file <- sub("\\.fastq",".sam",fastq.file)
