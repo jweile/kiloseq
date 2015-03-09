@@ -1,14 +1,7 @@
 #!/bin/bash
 
 ###
-#
 # Interpolate paths to binaries from bins.cfg into target scripts
-# R references need to be placed in: 
-# lib/analyze2.R
-# lib/libyogiplot.R
-# lib/master.R
-# lib/slave.R
-# lib/synergizer.R
 #
 
 config=$1
@@ -20,6 +13,10 @@ declare -A bins=(
   ["BLASTbin"]=`grep blast $config|cut -d, -f2` 
   ["SGEbin"]=`grep Rscript $config|cut -d, -f2`
   ["BowtieBin"]=`grep bowtie2 $config|cut -d, -f2`
+  # ["JavaBin"]=`grep java $config|cut -d, -f2`
+  # ["SNVerBin"]=`grep SNVer $config|cut -d, -f2`
+  ["SAMtoolsBin"]=`grep samtools $config|cut -d, -f2`
+  ["BCFtoolsBin"]=`grep bcftools $config|cut -d, -f2`
 )
 
 function interpolate {
@@ -36,7 +33,7 @@ function interpolate {
   #Load file contents into variable
   contents=`cat $targetfile`
 
-  #iterator over remaining arguments
+  #iterate over replacements
   for key in ${!bins[@]}
   do
     #escape slash characters (don't even think about messing with this!)

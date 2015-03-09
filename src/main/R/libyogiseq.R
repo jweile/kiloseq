@@ -406,18 +406,19 @@ init.translator <- function(ctable.file="codontable.txt") {
 # db.file = Location of bowtie reference DB
 #
 bowtie <- function(fastq.file, db.file, 
-	clip3=0, clip5=0, 
-	purge=TRUE, debug.mode=FALSE) {
+	clip3=0, clip5=0, short=TRUE
+	purge=TRUE, debug.mode=FALSE, parse=TRUE, header=FALSE) {
 
 	sam.file <- sub("\\.fastq",".sam",fastq.file)
 	tryCatch(
 		exitCode <- system(paste(
-			#/home/rothlab/jweile/bin/bowtie2
+			#"/home/rothlab/jweile/bin/bowtie2",
 			"$BowtieBin",
 			ifelse(clip3>0,paste("-3",clip3),""),
 			ifelse(clip5>0,paste("-5",clip5),""),
-			"-L 4 -N 1 -i C,1 --score-min C,0",
-			"--local --no-head",
+			ifelse(short,"-L 4 -N 1 -i C,1 --score-min C,0",""),
+			"--local",
+			ifelse(header,"","--no-head"),
 			"-x",db.file,
 			"-U",fastq.file,
 			"-S",sam.file
@@ -432,16 +433,68 @@ bowtie <- function(fastq.file, db.file,
 		logger$fatal(e)
 		stop(e)
 	}
-	sam <- read.delim(sam.file,header=FALSE,stringsAsFactors=FALSE)
-	colnames(sam) <- c(
-		"cname","flag","rname","pos","mapq","cigar","mrnm","mpos",
-		"isize","seq","qual","tags"
-	)
-	if(purge && !debug.mode) {
-		file.remove(sam.file)
+	if (parse) {
+		sam <- read.delim(sam.file,header=FALSE,stringsAsFactors=FALSE)
+		colnames(sam) <- c(
+			"cname","flag","rname","pos","mapq","cigar","mrnm","mpos",
+			"isize","seq","qual","tags"
+		)
+		if(purge && !debug.mode) {
+			file.remove(sam.file)
+		}
+		sam
+	} else {
+		sam.file
 	}
-	sam
 }
+
+call.variants <- function(sam.file, ref.file) {
+	vcf.file <- sub(".sam$","vcf",sam.file)
+	tryCatch({
+		exitCode <- system(paste(
+			"$SAMtoolsBin view -b -S",sam.file"|",
+			"$SAMtoolsBin sort -o - - |",
+			"$SAMtoolsBin mpileup -f ",ref.file," - |",
+			"$BCFtoolsBin view -c - >",
+			vcf.file
+		))
+		if (exitCode != 0) {
+			stop("Error executing Bowtie!")
+		}
+	},
+	error=function(e) {
+		logger$fatal(e)
+		stop(e)
+	})
+	vcf <- read.delim(vcf.file,stringsAsFactors=FALSE,comment.char="#",header=FALSE)
+	colnames(vcf) <- c("gene","pos","id","ref","alt","qual","filter","info","format","-")
+	vcf
+}
+
+# ####
+# # Function for safely running SNVer
+# # sam.file = input SAM alignment
+# # reference.file = FASTA file that served as the reference of the alignment.
+# #
+# snver <- function(sam.file,reference.file) {
+# 	vcf.base <- sub(".sam","",sam.file)
+# 	tryCatch(
+# 		exitCode <- system(paste(
+# 			"$JavaBin -jar $SNVerBin -r",reference.file,"-n 2",
+# 			"-o",vcf.base,"-i",sam.file,"-u 20"
+# 		)),
+# 		error=function(e) {
+# 			logger$fatal(e)
+# 			stop(e)
+# 		}
+# 	)
+# 	if (exitCode != 0) {
+# 		e <- simpleError("Error executing SNVer!")
+# 		logger$fatal(e)
+# 		stop(e)
+# 	}
+	
+# }
 
 
 

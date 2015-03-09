@@ -12,41 +12,7 @@ source("lib/cliargs.R")      #Command-line argument processing
 source("lib/libyogitools.R") #Helper functions
 source("lib/libyogiseq.R")
 
-# Working directory
-dir.name <- getArg("dir",required=TRUE)
-if (regexpr("/$",dir.name) < 1) {
-	dir.name <- paste(dir.name,"/",sep="")
-}
-# Job ID
-job.id <- getArg("id",required=TRUE)
-# ORF Sequence DB
-orf.db <- getArg("orfDB",required=TRUE)
-
-# Turns on debug mode
-debug.mode <- as.logical(getArg("debug",default=FALSE))
-
-#Create logger
-log.file <- paste(dir.name,"consolidator_",job.id,".log",sep="")
-logger <- new.logger(log.file)
-
-
-#####
-# STEP 1: Consolidate results
-#####
-logger$info("Consolidating results...")
-system(paste("cat ",dir.name,"R1_*.fastq>",dir.name,"R1.fastq&&rm ",dir.name,"R1_*.fastq",sep=""))
-system(paste("cat ",dir.name,"R2_*.fastq>",dir.name,"R2.fastq&&rm ",dir.name,"R2_*.fastq",sep=""))
-system(paste("cat ",dir.name,"BC_*.fastq>",dir.name,"BC.fastq&&rm ",dir.name,"BC_*.fastq",sep=""))
-
-r1.file <- paste(dir.name,"R1.fastq",sep="")
-r2.file <- paste(dir.name,"R2.fastq",sep="")
-bc.file <- paste(dir.name,"BC.fastq",sep="")
-
-#####
-# STEP 2: Assemble the barcode
-#####
-
-#Load sequences
+#Function for safely loading sequences
 read.fastq <- function(f) {
 	tryCatch({
 		con <- file(f, open="r")
@@ -68,9 +34,64 @@ read.fastq <- function(f) {
 	})
 }
 
+#Function for safely writing sequences
+write.fastq <- function(f,seqs) {
+	tryCatch({
+		con <- file(f, open="w")
+		writeFASTQ(con,seqs)
+	},
+	error = function(ex) {
+		logger$fatal(paste("Error while writing file",f," :\n",ex))
+		stop(ex)
+	},
+	finally = {
+		if (exists("con") && isOpen(con)) {
+			close(con)
+		}
+	})
+}
+
+# Working directory
+dir.name <- getArg("dir",required=TRUE)
+if (regexpr("/$",dir.name) < 1) {
+	dir.name <- paste(dir.name,"/",sep="")
+}
+# Job ID
+job.id <- getArg("id",required=TRUE)
+# ORF Sequence DB
+orf.db <- getArg("orfDB",required=TRUE)
+orf.fa <- paste(orf.db,".fa",sep="")
+
+# Turns on debug mode
+debug.mode <- as.logical(getArg("debug",default=FALSE))
+
+#Create logger
+log.file <- paste(dir.name,job.id,".log",sep="")
+logger <- new.logger(log.file)
+
+
+#####
+# STEP 1: Consolidate results
+#####
+
+logger$info("Consolidating results...")
+system(paste("cat ",dir.name,"R1_*.fastq>",dir.name,"R1.fastq&&rm ",dir.name,"R1_*.fastq",sep=""))
+system(paste("cat ",dir.name,"R2_*.fastq>",dir.name,"R2.fastq&&rm ",dir.name,"R2_*.fastq",sep=""))
+system(paste("cat ",dir.name,"BC_*.fastq>",dir.name,"BC.fastq&&rm ",dir.name,"BC_*.fastq",sep=""))
+
+r1.file <- paste(dir.name,"R1.fastq",sep="")
+r2.file <- paste(dir.name,"R2.fastq",sep="")
+bc.file <- paste(dir.name,"BC.fastq",sep="")
+
+
+#####
+# STEP 2: Assemble the barcodes
+#####
+
 logger$info("Reading barcodes...")
 bcs <- read.fastq(bc.file)
 bc.seqs <- sapply(bcs,function(x)x$toString())
+bc.names <- sapply(bcs,function(x)x$getID())
 #Compute frequences of each sequence
 bc.freqs <- table(bc.seqs)
 #Pick sequences with > 1% occurrence
@@ -89,24 +110,88 @@ for (i in 2:length(top.freqs)) {
 		}
 	}
 }
+
+#which reads belong to which cluster?
+cluster.readnames <- lapply(cm$getClusters(), function(cluster) {
+	seqs <- names(top.freqs)[cluster]
+	bc.names[which(bc.seqs %in% seqs)]
+})
+
+#what is the barcode sequence of each cluster?
 top.clusters <- do.call(rbind,lapply(cm$getClusters(), function(cluster) {
 	top <- names(top.freqs[cluster])[[which.max(top.freqs[cluster])]]
 	list(seq=top,freq=sum(top.freqs[cluster])/length(bc.seqs))
 }))
-# top.clusters <- top.clusters[order(unlist(top.clusters[,2]),decreasing=TRUE),],
 top.clusters <- data.frame(seq=unlist(top.clusters[,1]),freq=unlist(top.clusters[,2]),stringsAsFactors=FALSE)
-top.clusters <- top.clusters[order(top.clusters$freq,decreasing=TRUE),]
+
+#sort by frequency
+c.order <- order(top.clusters$freq,decreasing=TRUE)
+top.clusters <- top.clusters[c.order,]
+cluster.readnames <- cluster.readnames[c.order]
+
+#write barcodes to file
 write.table(
 	top.clusters,
 	paste(dir.name,"barcodes.csv",sep=""),
 	sep=",",quote=FALSE,row.names=FALSE
 )
 
+####
+# STEP 3: Segregate reads based on barcodes
+####
+logger$info("Loading sequence data...")
+r1.reads <- read.fastq(r1.file)
+names(r1.reads) <- sapply(r1.reads,function(x)x$getID())
+
+logger$info("Segregating reads by barcode...")
+segregated.r1.files <- sapply(1:nrow(top.clusters), function(i) {
+	read.ids <- cluster.readnames[[i]]
+	reads <- r1.reads[read.ids]
+	sub.file <- paste(dir.name,"R1_BC",i,".fastq",sep="")
+	write.fastq(sub.file,reads)
+	sub.file
+})
 
 #####
-# STEP 3: Align to ORFs
+# STEP 4: Align to ORFs and call variants
 #####
-orf.sam <- bowtie(r1.file, orf.db, purge=FALSE, debug.mode=debug.mode)
+logger$info("Aligning reads to ORF...")
+
+ref.con <- file(ref.file,open="r")
+ref.seq <- readFASTA(ref.con)[[1]]
+close(ref.con)
+
+calls <- sapply(segregated.r1.files, function(r1.file) {
+	#Alignment
+	sam.file <- bowtie(r1.file, orf.db, 
+		purge=FALSE, parse=FALSE, header=TRUE, short=FALSE,
+		debug.mode=debug.mode
+	)
+	#Variant Caller
+	vcf <- call.variants(sam.file,orf.fa)
+	#Process results
+	dp <- as.numeric(extract.groups(vcf$info,"DP=(\\d+)")[,1])
+	depth <- sapply(1:length(ref.seq), function(i) {
+		if (i %in% vcf$pos) {
+			dp[[which(vcf$pos == i)[[1]]]]
+		} else {
+			0
+		}
+	})
+	if (sum(depth < 5) > 10) {
+		return("low coverage")
+	}
+	#TODO: Exctract significant SNPs and translate!
+	return("Good!")
+}))
+
+top.clusters[,"call"] <- calls
+
+write.table(
+	top.clusters,
+	paste(dir.name,"calls.csv",sep=""),
+	sep=",",quote=FALSE,row.names=FALSE
+)
 
 
-
+logger$info("Done!")
