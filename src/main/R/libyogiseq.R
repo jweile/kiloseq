@@ -452,7 +452,7 @@ call.variants <- function(sam.file, ref.file) {
 	vcf.file <- sub(".sam$","vcf",sam.file)
 	tryCatch({
 		exitCode <- system(paste(
-			"$SAMtoolsBin view -b -S",sam.file"|",
+			"$SAMtoolsBin view -b -S",sam.file,"|",
 			"$SAMtoolsBin sort -o - - |",
 			"$SAMtoolsBin mpileup -f ",ref.file," - |",
 			"$BCFtoolsBin view -c - >",
