@@ -205,5 +205,31 @@ invisible(lapply(result.dirs, function(dir.name) {
 #Wait for the remaining jobs to finish
 sge$wait(verbose=TRUE)
 
+####
+# PHASE 3: COLLECT THE RESULTS
+#
+calls <- do.call(rbind,lapply(result.dirs, function(dir.name) {
+	sub.dirs <- list.dirs(dir.name)
+	do.call(rbind,lapply(sub.dirs, function(sub.dir) {
+		swim.id <- gsub(".*/","",sub("/$","",dir.name))
+		well.id <- gsub(".*/","",sub.dir)
+		if (regexpr("[A-D]_\\w\\d{2}",well.id) < 0) {
+			return(NULL)
+		}
+		calls.file <- paste(sub.dir,"/calls.csv",sep="")
+		if (file.exists(calls.file)) {
+			calls <- read.csv(calls.file,stringsAsFactors=FALSE)
+			return(cbind(set=swim.id,well=well.id,calls))
+		} else {
+			return(NULL)
+		}
+	}))
+}))
+write.table(calls,paste(out.dir,"calls.csv",sep=""),sep=",",row.names=FALSE)
+top.calls <- do.call(rbind,with(calls,tapply(1:nrow(calls),paste(set,well,sep="-"),function(i) {
+	calls[min(i),]
+})))
+write.table(top.calls,paste(out.dir,"top_calls.csv",sep=""),sep=",",row.names=FALSE)
+
 
 logger$info("Done!")

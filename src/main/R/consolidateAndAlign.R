@@ -175,7 +175,7 @@ out <- do.call(rbind,lapply(segregated.r1.files, function(r1.file) {
 	)
 	al.rate <- 1-(sum(sam$rname == "*")/nrow(sam))
 	if (al.rate == 0) {
-		return(list(call="No alignment!",al.rate=al.rate))
+		return(list(call="No alignment!",al.rate=al.rate,dp5=0))
 	}
 
 	#Variant Caller
@@ -189,15 +189,17 @@ out <- do.call(rbind,lapply(segregated.r1.files, function(r1.file) {
 			0
 		}
 	})
+	dp5 <- sum(depth > 5)/length(ref.seq)
 	if (sum(depth < 5) > 10) {
-		return(list(call="Low coverage!",al.rate=al.rate))
+		return(list(call="Low coverage!",al.rate=al.rate,dp5=dp5))
 	}
 	#TODO: Exctract significant SNPs and translate!
-	return(list(call="Good!",al.rate=al.rate))
+	return(list(call="Good!",al.rate=al.rate,dp5=dp5))
 }))
 
 top.clusters[,"al.rate"] <- unlist(out[,"al.rate"])
 top.clusters[,"call"] <- unlist(out[,"call"])
+top.clusters[,"dp5"] <- unlist(out[,"dp5"])
 
 write.table(
 	top.clusters,
