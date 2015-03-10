@@ -110,8 +110,10 @@ result.dirs <- apply(rfile.table, 1, function(rfiles) {
 	r1.file <- rfiles[["r1"]]
 	r2.file <- rfiles[["r2"]]
 
+	sub.dir <- gsub(".+/|\\.fastq(\\.gz)?$","",r1.file)
+
 	#TODO: name directory according to SWIM well
-	dir.name <- paste(out.dir,gsub(".+/|\\.fastq(\\.gz)?$","",r1.file),"/",sep="")
+	dir.name <- paste(out.dir,sub.dir,"/",sep="")
 	dir.create(dir.name)
 
 	###
@@ -136,9 +138,7 @@ result.dirs <- apply(rfile.table, 1, function(rfiles) {
 		r2.chunk <- make.chunk(con.r2,dir.name,i,"R2")
 
 		#Create a job id
-		job.id <- paste(session.tag,timestamp,i,sep="_")
-		#Designate a log file.
-		slave.log <- paste(dir.name,"slave_",i,".log",sep="")
+		job.id <- paste(session.tag,sub.dir,timestamp,i,sep="_")
 
 		#Submit Slave job to SunGridEngine
 		sge$enqueue(
