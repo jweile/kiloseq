@@ -22,7 +22,7 @@ source("lib/libyogitools.R") #Some handy tools
 # Files containing the R1 and R2 reads. Example file:
 r1.files <- getArg("r1",required=TRUE)
 r2.files <- getArg("r2",required=TRUE)
-if (length(strsplit(r1.files,",")[[1]]) != length(strsplit(r2.files,","))) {
+if (length(strsplit(r1.files,",")[[1]]) != length(strsplit(r2.files,",")[[1]])) {
 	stop("There needs to be an equal number of r1 and r2 files!")
 }
 rfile.table <- cbind(r1=strsplit(r1.files,",")[[1]],r2=strsplit(r2.files,",")[[1]])
@@ -208,6 +208,7 @@ sge$wait(verbose=TRUE)
 ####
 # PHASE 3: COLLECT THE RESULTS
 #
+logger$info("Collecting results...")
 calls <- do.call(rbind,lapply(result.dirs, function(dir.name) {
 	sub.dirs <- list.dirs(dir.name)
 	do.call(rbind,lapply(sub.dirs, function(sub.dir) {
