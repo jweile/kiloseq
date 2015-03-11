@@ -102,7 +102,7 @@ wells <- wells[read.order]
 # dntag.snippet <- "TAGTGCGATTG"
 seqs <- sapply(r2.seq,function(s)s$toString())
 barcode.seq <- mapply(function(m,s) {
-	if (m > 0) subseq(s,m+11,length(s)) else NA
+	if (m > 0) subseq(s,m+nchar(dntag.snippet),length(s)) else NA
 },m=regexpr(dntag.snippet, seqs),s=r2.seq)
 
 # logger$info("Aligning to DN tags...")
