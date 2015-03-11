@@ -48,6 +48,8 @@ welltag.db <- getArg("welltags",default="res/welltags")
 # Location of ORF DB
 orf.db <- getArg("orfDB",default="res/orfs")
 
+snippet <- getArg("snippet",default="TAGTGCGATTG")
+
 
 ###
 # Create output directory
@@ -151,6 +153,7 @@ result.dirs <- apply(rfile.table, 1, function(rfiles) {
 				paste("dir=",dir.name,sep=""),
 				paste("id=",job.id,sep=""),
 				paste("welltags=",welltag.db,sep=""),
+				paste("snippet=",snippet,sep=""),
 				# paste("dntags=",dntag.db,sep=""),
 				paste("debug=",debug.mode,sep="")
 			)

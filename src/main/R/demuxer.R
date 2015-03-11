@@ -26,6 +26,7 @@ dir.name <- getArg("dir",required=TRUE)
 job.id <- getArg("id",required=TRUE)
 # Location of well tag DB
 welltag.db <- getArg("welltags",default="res/welltags")
+dntag.snippet <- getArg("snippet",default="TAGTGCGATTG")
 # Location of DNTAG DB
 # dntag.db <- getArg("dntags",default="res/dntags")
 
@@ -98,7 +99,7 @@ wells <- wells[read.order]
 #####
 # STEP 2: Extract Barcodes
 #####
-dntag.snippet <- "TAGTGCGATTG"
+# dntag.snippet <- "TAGTGCGATTG"
 seqs <- sapply(r2.seq,function(s)s$toString())
 barcode.seq <- mapply(function(m,s) {
 	if (m > 0) subseq(s,m+11,length(s)) else NA
