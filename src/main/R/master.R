@@ -235,5 +235,13 @@ top.calls <- do.call(rbind,with(calls,tapply(1:nrow(calls),paste(set,well,sep="-
 })))
 write.table(top.calls,paste(out.dir,"top_calls.csv",sep=""),sep=",",row.names=FALSE)
 
+logger$info("Calculating demultiplexing efficiencies...")
+system(paste("bash lib/demuxStats.sh",out.dir))
+demuxStats <- do.call(rbind,lapply(result.dirs, function(dir) {
+	f <- paste(dir,"/counts.csv",sep="")
+	cbind(set=dir,read.csv(f))
+}))
+write.table(demuxStats,paste(out.dir,"demuxStats.csv"),sep=",",row.names=FALSE)
+
 
 logger$info("Done!")
