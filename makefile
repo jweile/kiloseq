@@ -47,6 +47,7 @@ _build:
 	cp src/main/resources/* kiloseq/res/
 	# cp src/main/html/* kiloseq/html/
 	cp src/main/bash/* kiloseq/
+	mv kiloseq/demuxStats.sh kiloseq/lib/
 	#interpolate binary locations
 	src/make/interpolate.sh bins.cfg kiloseq/
 	#setup permissions
