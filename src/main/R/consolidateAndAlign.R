@@ -198,8 +198,8 @@ out <- do.call(rbind,lapply(segregated.r1.files, function(r1.file) {
 }))
 
 top.clusters[,"al.rate"] <- unlist(out[,"al.rate"])
-top.clusters[,"call"] <- unlist(out[,"call"])
 top.clusters[,"dp5"] <- unlist(out[,"dp5"])
+top.clusters[,"call"] <- unlist(out[,"call"])
 
 write.table(
 	top.clusters,
