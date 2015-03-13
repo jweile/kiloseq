@@ -106,12 +106,12 @@ wells <- wells[read.order]
 #####
 # STEP 2: Extract Barcodes
 #####
-# dntag.snippet <- "TAGTGCGATTG"
-seqs <- sapply(tag.read.seq,function(s)s$toString())
-barcode.seq <- mapply(function(m,s) {
-	if (m > 0) subseq(s,m+nchar(dntag.snippet),length(s)) else NA
-},m=regexpr(dntag.snippet, seqs),s=tag.read.seq)
-
+if (use.barcodes) {
+	seqs <- sapply(tag.read.seq,function(s)s$toString())
+	barcode.seq <- mapply(function(m,s) {
+		if (m > 0) subseq(s,m+nchar(dntag.snippet),length(s)) else NA
+	},m=regexpr(dntag.snippet, seqs),s=tag.read.seq)
+}
 
 
 #Function for safely writing sequences
@@ -140,17 +140,19 @@ tapply(1:length(wells), wells, function(idx) {
 	well <- wells[[ idx[[1]] ]]
 	sub.dir <- paste(dir.name,well,"/",sep="")
 	if (!file.exists(sub.dir)) dir.create(sub.dir,showWarnings=FALSE)
+
 	orf.file <- paste(sub.dir,"OR_",job.id,".fastq",sep="")
 	tag.file <- paste(sub.dir,"TR_",job.id,".fastq",sep="")
-	bc.file <- paste(sub.dir,"BC_",job.id,".fastq",sep="")
-
-	barcodes <- barcode.seq[idx]
-	barcodes <- barcodes[!is.na(barcodes)]
-
 	write.fastq(orf.file,orf.read.seq[idx])
 	write.fastq(tag.file,tag.read.seq[idx])
-	if (length(barcodes) > 0) {
-		write.fastq(bc.file,barcodes)
+
+	if (use.barcodes) {
+		bc.file <- paste(sub.dir,"BC_",job.id,".fastq",sep="")
+		barcodes <- barcode.seq[idx]
+		barcodes <- barcodes[!is.na(barcodes)]
+		if (length(barcodes) > 0) {
+			write.fastq(bc.file,barcodes)
+		}
 	}
 })
 

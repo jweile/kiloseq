@@ -80,80 +80,93 @@ logger <- new.logger(log.file)
 logger$info("Consolidating results...")
 system(paste("cat ",dir.name,"OR_*.fastq>",dir.name,"OR.fastq&&rm ",dir.name,"OR_*.fastq",sep=""))
 system(paste("cat ",dir.name,"TR_*.fastq>",dir.name,"TR.fastq&&rm ",dir.name,"TR_*.fastq",sep=""))
-system(paste("cat ",dir.name,"BC_*.fastq>",dir.name,"BC.fastq&&rm ",dir.name,"BC_*.fastq",sep=""))
-
 orf.read.file <- paste(dir.name,"OR.fastq",sep="")
 tag.read.file <- paste(dir.name,"TR.fastq",sep="")
-bc.file <- paste(dir.name,"BC.fastq",sep="")
 
+if (use.barcodes) {
+	system(paste("cat ",dir.name,"BC_*.fastq>",dir.name,"BC.fastq&&rm ",dir.name,"BC_*.fastq",sep=""))
+	bc.file <- paste(dir.name,"BC.fastq",sep="")
+}
 
 #####
 # STEP 2: Assemble the barcodes
 #####
 
-logger$info("Reading barcodes...")
-bcs <- read.fastq(bc.file)
-bc.seqs <- sapply(bcs,function(x)x$toString())
-bc.names <- sapply(bcs,function(x)x$getID())
-#Compute frequences of each sequence
-bc.freqs <- table(bc.seqs)
-#Pick sequences with > 1% occurrence
-top.freqs <- bc.freqs[bc.freqs > 0.01*length(bc.seqs)]
+if (use.barcodes) {
 
-logger$info("Clustering barcodes...")
-#Cluster based on edit distance
-cm <- new.cluster.map(length(top.freqs))
-for (i in 2:length(top.freqs)) {
-	seq.i <- names(top.freqs)[i]
-	for (j in 1:(i-1)) {
-		seq.j <- names(top.freqs)[j]
-		al <- new.alignment(seq.i,seq.j)
-		if (al$getDistance() < 3) {
-			cm$addLink(i,j)
+	logger$info("Reading barcodes...")
+	bcs <- read.fastq(bc.file)
+	bc.seqs <- sapply(bcs,function(x)x$toString())
+	bc.names <- sapply(bcs,function(x)x$getID())
+	#Compute frequences of each sequence
+	bc.freqs <- table(bc.seqs)
+	#Pick sequences with > 1% occurrence
+	top.freqs <- bc.freqs[bc.freqs > 0.01*length(bc.seqs)]
+
+	logger$info("Clustering barcodes...")
+	#Cluster based on edit distance
+	cm <- new.cluster.map(length(top.freqs))
+	for (i in 2:length(top.freqs)) {
+		seq.i <- names(top.freqs)[i]
+		for (j in 1:(i-1)) {
+			seq.j <- names(top.freqs)[j]
+			al <- new.alignment(seq.i,seq.j)
+			if (al$getDistance() < 3) {
+				cm$addLink(i,j)
+			}
 		}
 	}
+
+	#which reads belong to which cluster?
+	cluster.readnames <- lapply(cm$getClusters(), function(cluster) {
+		seqs <- names(top.freqs)[cluster]
+		bc.names[which(bc.seqs %in% seqs)]
+	})
+
+	#what is the barcode sequence of each cluster?
+	top.clusters <- do.call(rbind,lapply(cm$getClusters(), function(cluster) {
+		top <- names(top.freqs[cluster])[[which.max(top.freqs[cluster])]]
+		list(seq=top,freq=sum(top.freqs[cluster])/length(bc.seqs))
+	}))
+	top.clusters <- data.frame(seq=unlist(top.clusters[,1]),freq=unlist(top.clusters[,2]),stringsAsFactors=FALSE)
+
+	#sort by frequency
+	c.order <- order(top.clusters$freq,decreasing=TRUE)
+	top.clusters <- top.clusters[c.order,]
+	cluster.readnames <- cluster.readnames[c.order]
+
+	#write barcodes to file
+	write.table(
+		top.clusters,
+		paste(dir.name,"barcodes.csv",sep=""),
+		sep=",",quote=FALSE,row.names=FALSE
+	)
+} else {
+	#in case of no barcodes, just use a dummy table
+	top.clusters <- data.frame(seq=NA,freq=NA,stringsAsFactors=FALSE)
 }
-
-#which reads belong to which cluster?
-cluster.readnames <- lapply(cm$getClusters(), function(cluster) {
-	seqs <- names(top.freqs)[cluster]
-	bc.names[which(bc.seqs %in% seqs)]
-})
-
-#what is the barcode sequence of each cluster?
-top.clusters <- do.call(rbind,lapply(cm$getClusters(), function(cluster) {
-	top <- names(top.freqs[cluster])[[which.max(top.freqs[cluster])]]
-	list(seq=top,freq=sum(top.freqs[cluster])/length(bc.seqs))
-}))
-top.clusters <- data.frame(seq=unlist(top.clusters[,1]),freq=unlist(top.clusters[,2]),stringsAsFactors=FALSE)
-
-#sort by frequency
-c.order <- order(top.clusters$freq,decreasing=TRUE)
-top.clusters <- top.clusters[c.order,]
-cluster.readnames <- cluster.readnames[c.order]
-
-#write barcodes to file
-write.table(
-	top.clusters,
-	paste(dir.name,"barcodes.csv",sep=""),
-	sep=",",quote=FALSE,row.names=FALSE
-)
 
 ####
 # STEP 3: Segregate reads based on barcodes
 ####
-logger$info("Loading sequence data...")
-orf.reads <- read.fastq(orf.read.file)
-names(orf.reads) <- sapply(orf.reads,function(x)x$getID())
+if (use.barcodes) {
 
-logger$info("Segregating reads by barcode...")
-segregated.or.files <- sapply(1:nrow(top.clusters), function(i) {
-	read.ids <- cluster.readnames[[i]]
-	reads <- orf.reads[read.ids]
-	sub.file <- paste(dir.name,"OR_BC",i,".fastq",sep="")
-	write.fastq(sub.file,reads)
-	sub.file
-})
+	logger$info("Loading sequence data...")
+	orf.reads <- read.fastq(orf.read.file)
+	names(orf.reads) <- sapply(orf.reads,function(x)x$getID())
+
+	logger$info("Segregating reads by barcode...")
+	segregated.or.files <- sapply(1:nrow(top.clusters), function(i) {
+		read.ids <- cluster.readnames[[i]]
+		reads <- orf.reads[read.ids]
+		sub.file <- paste(dir.name,"OR_BC",i,".fastq",sep="")
+		write.fastq(sub.file,reads)
+		sub.file
+	})
+} else {
+	#in case of no barcodes use a dummy file list
+	segregated.or.files <- orf.read.file
+}
 
 #####
 # STEP 4: Align to ORFs and call variants
