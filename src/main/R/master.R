@@ -169,8 +169,8 @@ result.dirs <- apply(rfile.table, 1, function(rfiles) {
 				paste("id=",job.id,sep=""),
 				paste("welltags=",welltag.db,sep=""),
 				paste("snippet=",snippet,sep=""),
-				paste("useBarcodes",use.barcodes,sep=""),
-				paste("tagOrientation",tag.orientation,sep=""),
+				paste("useBarcodes=",use.barcodes,sep=""),
+				paste("tagOrientation=",tag.orientation,sep=""),
 				paste("debug=",debug.mode,sep="")
 			)
 		)
@@ -216,7 +216,7 @@ invisible(lapply(result.dirs, function(dir.name) {
 				paste("dir=",sub.dir,sep=""),
 				paste("id=",job.id,sep=""),
 				paste("orfDB=",orf.db,sep=""),
-				paste("useBarcodes",use.barcodes,sep=""),
+				paste("useBarcodes=",use.barcodes,sep=""),
 				paste("debug=",debug.mode,sep="")
 			)
 		)
