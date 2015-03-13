@@ -62,6 +62,9 @@ job.id <- getArg("id",required=TRUE)
 orf.db <- getArg("orfDB",required=TRUE)
 orf.fa <- paste(orf.db,".fa",sep="")
 
+# Whether or not to expect barcodes in the tag reads.
+use.barcodes <- as.logical(getArg("useBarcodes",default=TRUE))
+
 # Turns on debug mode
 debug.mode <- as.logical(getArg("debug",default=FALSE))
 
@@ -75,12 +78,12 @@ logger <- new.logger(log.file)
 #####
 
 logger$info("Consolidating results...")
-system(paste("cat ",dir.name,"R1_*.fastq>",dir.name,"R1.fastq&&rm ",dir.name,"R1_*.fastq",sep=""))
-system(paste("cat ",dir.name,"R2_*.fastq>",dir.name,"R2.fastq&&rm ",dir.name,"R2_*.fastq",sep=""))
+system(paste("cat ",dir.name,"OR_*.fastq>",dir.name,"OR.fastq&&rm ",dir.name,"OR_*.fastq",sep=""))
+system(paste("cat ",dir.name,"TR_*.fastq>",dir.name,"TR.fastq&&rm ",dir.name,"TR_*.fastq",sep=""))
 system(paste("cat ",dir.name,"BC_*.fastq>",dir.name,"BC.fastq&&rm ",dir.name,"BC_*.fastq",sep=""))
 
-r1.file <- paste(dir.name,"R1.fastq",sep="")
-r2.file <- paste(dir.name,"R2.fastq",sep="")
+orf.read.file <- paste(dir.name,"OR.fastq",sep="")
+tag.read.file <- paste(dir.name,"TR.fastq",sep="")
 bc.file <- paste(dir.name,"BC.fastq",sep="")
 
 
@@ -140,14 +143,14 @@ write.table(
 # STEP 3: Segregate reads based on barcodes
 ####
 logger$info("Loading sequence data...")
-r1.reads <- read.fastq(r1.file)
-names(r1.reads) <- sapply(r1.reads,function(x)x$getID())
+orf.reads <- read.fastq(orf.read.file)
+names(orf.reads) <- sapply(orf.reads,function(x)x$getID())
 
 logger$info("Segregating reads by barcode...")
-segregated.r1.files <- sapply(1:nrow(top.clusters), function(i) {
+segregated.or.files <- sapply(1:nrow(top.clusters), function(i) {
 	read.ids <- cluster.readnames[[i]]
-	reads <- r1.reads[read.ids]
-	sub.file <- paste(dir.name,"R1_BC",i,".fastq",sep="")
+	reads <- orf.reads[read.ids]
+	sub.file <- paste(dir.name,"OR_BC",i,".fastq",sep="")
 	write.fastq(sub.file,reads)
 	sub.file
 })
@@ -161,10 +164,10 @@ ref.con <- file(orf.fa,open="r")
 ref.seq <- readFASTA(ref.con)[[1]]
 close(ref.con)
 
-out <- do.call(rbind,lapply(segregated.r1.files, function(r1.file) {
+out <- do.call(rbind,lapply(segregated.or.files, function(orf.read.file) {
 
 	#Alignment
-	sam.file <- bowtie(r1.file, orf.db, 
+	sam.file <- bowtie(orf.read.file, orf.db, 
 		purge=FALSE, parse=FALSE, header=TRUE, short=FALSE,
 		debug.mode=debug.mode
 	)

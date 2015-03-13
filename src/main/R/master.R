@@ -32,23 +32,37 @@ rfile.table <- cbind(r1=strsplit(r1.files,",")[[1]],r2=strsplit(r2.files,",")[[1
 session.tag <- getArg("session",default="kiloseq")
 
 # The chuck size determines how many reads are processed by each slave script.
-chunk.size <- as.numeric(getArg("chunksize",default=20000))
+chunk.size <- as.integer(getArg("chunksize",default=20000))
+if (is.na(chunk.size)) stop("chunksize must be integer number!")
 
 # Turns on debug mode
 debug.mode <- as.logical(getArg("debug",default=FALSE))
+if (is.na(debug.mode)) stop("debug must be TRUE or FALSE !")
 
 # This option determines how many jobs will be submitted to the cluster at maximum.
 # When more jobs are available, they get buffered internally until enough room exists in the queue.
-max.queue <- as.numeric(getArg("maxQueue",default=30))
+max.queue <- as.integer(getArg("maxQueue",default=30))
+if (is.na(max.queue)) stop("maxQueue must be integer number!")
 
 # Location of well tag DB
 welltag.db <- getArg("welltags",default="res/welltags")
-# # Location of DNTAG DB
-# dntag.db <- getArg("dntags",default="res/dntags")
+if (!file.exists(paste(welltag.db,".fa",sep=""))) stop("welltag DB not found!")
 # Location of ORF DB
 orf.db <- getArg("orfDB",default="res/orfs")
+if (!file.exists(paste(orf.db,".fa",sep=""))) stop("ORF DB not found!")
 
+# A sequence snippet preceding the barcode region. Used to find the barcode.
 snippet <- getArg("snippet",default="TAGTGCGATTG")
+if (regexpr("^[ACTG]+$",snippet) < 1) stop("Snippet must be valid DNA sequence!")
+
+# Whether or not to expect barcodes in the tag reads.
+use.barcodes <- as.logical(getArg("useBarcodes",default=TRUE))
+if (is.na(use.barcodes)) stop("useBarcodes must be TRUE or FALSE !")
+
+# Which read is considered the tag read? R1 or R2 ?
+tag.orientation <- getArg("tagOrientation",default="R2")
+if (!(tag.orientation %in% c("R1","R2"))) stop("tagOrientation must be R1 or R2")
+
 
 
 ###
@@ -142,6 +156,7 @@ result.dirs <- apply(rfile.table, 1, function(rfiles) {
 		#Create a job id
 		job.id <- paste(session.tag,sub.dir,timestamp,i,sep="_")
 
+
 		#Submit Slave job to SunGridEngine
 		sge$enqueue(
 			id=job.id,
@@ -154,7 +169,8 @@ result.dirs <- apply(rfile.table, 1, function(rfiles) {
 				paste("id=",job.id,sep=""),
 				paste("welltags=",welltag.db,sep=""),
 				paste("snippet=",snippet,sep=""),
-				# paste("dntags=",dntag.db,sep=""),
+				paste("useBarcodes",use.barcodes,sep=""),
+				paste("tagOrientation",tag.orientation,sep=""),
 				paste("debug=",debug.mode,sep="")
 			)
 		)
@@ -200,6 +216,7 @@ invisible(lapply(result.dirs, function(dir.name) {
 				paste("dir=",sub.dir,sep=""),
 				paste("id=",job.id,sep=""),
 				paste("orfDB=",orf.db,sep=""),
+				paste("useBarcodes",use.barcodes,sep=""),
 				paste("debug=",debug.mode,sep="")
 			)
 		)
@@ -230,10 +247,13 @@ calls <- do.call(rbind,lapply(result.dirs, function(dir.name) {
 	}))
 }))
 write.table(calls,paste(out.dir,"calls.csv",sep=""),sep=",",row.names=FALSE)
-top.calls <- do.call(rbind,with(calls,tapply(1:nrow(calls),paste(set,well,sep="-"),function(i) {
-	calls[min(i),]
-})))
-write.table(top.calls,paste(out.dir,"top_calls.csv",sep=""),sep=",",row.names=FALSE)
+
+if (use.barcodes) {
+	top.calls <- do.call(rbind,with(calls,tapply(1:nrow(calls),paste(set,well,sep="-"),function(i) {
+		calls[min(i),]
+	})))
+	write.table(top.calls,paste(out.dir,"top_calls.csv",sep=""),sep=",",row.names=FALSE)
+}
 
 logger$info("Calculating demultiplexing efficiencies...")
 system(paste("bash lib/demuxStats.sh",out.dir))
@@ -241,7 +261,7 @@ demuxStats <- do.call(rbind,lapply(result.dirs, function(dir) {
 	f <- paste(dir,"/counts.csv",sep="")
 	cbind(set=dir,read.csv(f))
 }))
-write.table(demuxStats,paste(out.dir,"demuxStats.csv"),sep=",",row.names=FALSE)
+write.table(demuxStats,paste(out.dir,"demuxStats.csv",sep=""),sep=",",row.names=FALSE)
 
 
 logger$info("Done!")

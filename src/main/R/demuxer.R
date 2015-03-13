@@ -26,9 +26,12 @@ dir.name <- getArg("dir",required=TRUE)
 job.id <- getArg("id",required=TRUE)
 # Location of well tag DB
 welltag.db <- getArg("welltags",default="res/welltags")
+# Sequence snippet preceding the barcode in the tag read.
 dntag.snippet <- getArg("snippet",default="TAGTGCGATTG")
-# Location of DNTAG DB
-# dntag.db <- getArg("dntags",default="res/dntags")
+# Whether or not to expect barcodes in the tag reads.
+use.barcodes <- as.logical(getArg("useBarcodes",default=TRUE))
+# Which read is considered the tag read? R1 or R2 ?
+tag.orientation <- getArg("tagOrientation",default="R2")
 
 # Turns on debug mode
 debug.mode <- as.logical(getArg("debug",default=FALSE))
@@ -36,6 +39,9 @@ debug.mode <- as.logical(getArg("debug",default=FALSE))
 #Create logger
 log.file <- paste(dir.name,"demuxer_",job.id,".log",sep="")
 logger <- new.logger(log.file)
+
+tag.read.file <- ifelse(tag.orientation=="R1",r1.file,r2.file)
+orf.read.file <- ifelse(tag.orientation=="R1",r2.file,r1.file)
 
 #Load sequences
 read.fastq <- function(f) {
@@ -62,20 +68,21 @@ read.fastq <- function(f) {
 seqnames <- function(seqs) sapply(seqs,function(s)s$getID())
 
 logger$info("Loading sequence data...")
-r1.seq <- read.fastq(r1.file)
-r2.seq <- read.fastq(r2.file)
+tag.read.seq <- read.fastq(tag.read.file)
+orf.read.seq <- read.fastq(orf.read.file)
 
-if (!all(seqnames(r1.seq)==seqnames(r2.seq))) {
+if (!all(seqnames(tag.read.seq)==seqnames(orf.read.seq))) {
 	logger$fatal("R1 and R2 reads do not correspond to each other!")
 	stop()
 }
 
 #####
-# STEP 1: Run Bowtie on R2 file against welltag DB and extract well information
+# STEP 1: Run Bowtie on tag read file against welltag DB and extract well information
 #####
 logger$info("Aligning to well tags...")
 #bowtie() function is defined in libyogitools.R
-welltag.sam <- bowtie(r2.file,welltag.db,clip3=47,debug.mode=debug.mode)
+#TODO: adjust clip size automatically based on average read length!
+welltag.sam <- bowtie(tag.read.file,welltag.db,clip3=47,debug.mode=debug.mode)
 #Extract Well info
 wells <- apply(
 	extract.groups(welltag.sam$rname,"SET_ID=(\\w{1})\\|WELL=(\\w{1}\\d{2})"), 
@@ -92,42 +99,19 @@ wells <- apply(
 	}
 )
 
-#sort wells according to order in R2 file
-read.order <- sapply(seqnames(r2.seq), function(name) which(welltag.sam$cname == name))
+#sort wells according to order in tag read file
+read.order <- sapply(seqnames(tag.read.seq), function(name) which(welltag.sam$cname == name))
 wells <- wells[read.order]
 
 #####
 # STEP 2: Extract Barcodes
 #####
 # dntag.snippet <- "TAGTGCGATTG"
-seqs <- sapply(r2.seq,function(s)s$toString())
+seqs <- sapply(tag.read.seq,function(s)s$toString())
 barcode.seq <- mapply(function(m,s) {
 	if (m > 0) subseq(s,m+nchar(dntag.snippet),length(s)) else NA
-},m=regexpr(dntag.snippet, seqs),s=r2.seq)
+},m=regexpr(dntag.snippet, seqs),s=tag.read.seq)
 
-# logger$info("Aligning to DN tags...")
-# dntag.sam <- bowtie(r2.file,dntag.db,debug.mode=debug.mode)
-
-# #CIGAR: S=Soft clip, H=Hard clip, N=Intron skip, M=Match, D=Deletion, I=Insertion, P=Padded
-# cigar <- global.extract.groups(dntag.sam$cigar,"(\\d+)([SHNMDIP]{1})")
-# #How many bases are clipped before the match?
-# #The clipped bases should be the welltag and a bit of the loxP site.
-# clip.width <- lapply(
-# 	cigar,
-# 	function(cigar) if (cigar[1,2]=="S") as.numeric(cigar[1,1]) else 0
-# )
-# #How long is the match in the read, including deletions?
-# match.width <- lapply(
-# 	cigar, function(cigar) sum(as.numeric(cigar[1,!(cigar[,2] %in% c("M","D")) )))
-# )
-# #the barcode starts at the end of the match
-# bc.start <- clip.width+match.width+1
-# #Extract barcode sequences. It's 25bp wide
-# barcode.seq <- lapply(1:length(r2.seq), function(i) {
-# 	bc.end <- bc.start[[i]]+25-1
-# 	if (length(r2.seq[[i]] < bc.end)) bc.end <- length(r2.seq[[i]])
-# 	subseq(r2.seq[[i]],bc.start[[i]],bc.end)
-# })
 
 
 #Function for safely writing sequences
@@ -156,15 +140,15 @@ tapply(1:length(wells), wells, function(idx) {
 	well <- wells[[ idx[[1]] ]]
 	sub.dir <- paste(dir.name,well,"/",sep="")
 	if (!file.exists(sub.dir)) dir.create(sub.dir,showWarnings=FALSE)
-	r1.file <- paste(sub.dir,"R1_",job.id,".fastq",sep="")
-	r2.file <- paste(sub.dir,"R2_",job.id,".fastq",sep="")
+	orf.file <- paste(sub.dir,"OR_",job.id,".fastq",sep="")
+	tag.file <- paste(sub.dir,"TR_",job.id,".fastq",sep="")
 	bc.file <- paste(sub.dir,"BC_",job.id,".fastq",sep="")
 
 	barcodes <- barcode.seq[idx]
 	barcodes <- barcodes[!is.na(barcodes)]
 
-	write.fastq(r1.file,r1.seq[idx])
-	write.fastq(r2.file,r2.seq[idx])
+	write.fastq(orf.file,orf.read.seq[idx])
+	write.fastq(tag.file,tag.read.seq[idx])
 	if (length(barcodes) > 0) {
 		write.fastq(bc.file,barcodes)
 	}
@@ -176,6 +160,6 @@ tapply(1:length(wells), wells, function(idx) {
 ####
 if (!debug.mode) {
 	logger$info("Cleaning up sequence fragments")
-	file.remove(r1.file)
-	file.remove(r2.file)
+	file.remove(orf.read.file)
+	file.remove(tag.read.file)
 }
