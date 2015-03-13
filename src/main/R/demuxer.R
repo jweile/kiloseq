@@ -80,9 +80,9 @@ if (!all(seqnames(tag.read.seq)==seqnames(orf.read.seq))) {
 # STEP 1: Run Bowtie on tag read file against welltag DB and extract well information
 #####
 logger$info("Aligning to well tags...")
-#bowtie() function is defined in libyogitools.R
-#TODO: adjust clip size automatically based on average read length!
-welltag.sam <- bowtie(tag.read.file,welltag.db,clip3=47,debug.mode=debug.mode)
+#bowtie() function is defined in libyogiseq.R
+tag.read.length <- median(sapply(tag.read.seq,length))
+welltag.sam <- bowtie(tag.read.file,welltag.db,clip3=tag.read.length-13,debug.mode=debug.mode)
 #Extract Well info
 wells <- apply(
 	extract.groups(welltag.sam$rname,"SET_ID=(\\w{1})\\|WELL=(\\w{1}\\d{2})"), 
