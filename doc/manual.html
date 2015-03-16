@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>KiloSEQ Pipeline Manual</title>
+<style>
+	body {
+		max-width:800px;
+		padding:50px;
+		line-height: 120%;
+		font-family: Helvetica,sans-serif;
+		text-align: justify;
+		/*margin-bottom: 200px;*/
+	}
+	pre {
+		background: #eeeeee;
+		padding: 5px;
+		border: 1px dashed #bbbbbb;
+		overflow-x: scroll;
+	}
+	pre.file {
+		background: #eeeeff;
+		border: 1px dotted #bbbbbb;
+		overflow-x: scroll;
+	}
+	p {
+		/*text-indent: 20px;
+		margin-bottom: 0px;
+		margin-top: 0px;*/
+	}
+	h2 {
+		margin-top: 50px;
+	}
+	details {
+		border: 1px dotted #aaaaaa;
+		padding: 10px;
+		margin-bottom:5px;
+	}
+	summary {
+		font-weight: bold;
+		cursor:pointer;
+		/*color: darkblue;*/
+	}
+	summary:hover{
+		text-decoration: underline;
+	};
+</style>
+</head>
+
+<body>
+
+	<h1>KiloSEQ Pipeline v0.1 manual</h1>
+
+	<h2>Purpose</h2>
+	<p>The KiloSEQ pipeline is used to process raw KiloSEQ output from the Illumina Nextseq500 platform. It performs the following steps:</p>
+	<ol>
+		<li>Reads are demultiplexed based on their well tags.</li>
+		<li>If desired, unknown barcode regions can be extracted for each well.</li>
+		<li>If multiple barcodes per well are detected, reads are sub-clustered by barcode.</li>
+		<li>ORF reads in each sub-cluster are aligned to an ORF reference and variants called.</li>
+	</ol>
+
+	<h2>Requirements</h2>
+	<p>You will need a Unix/Linux computing cluster with Sun Grid Engine v6.1, R/Rscript v3.0 and Bowtie2, samtools v0.1.18 and bcftools v0.1.17 installed to run this software, as well Mercurial v1.1 or higher to checkout and build this software.</p>
+
+	<h2>Installation</h2>
+	<p>Clone the source code using mercurial by running the following command:</p>
+	<code>
+		<pre>$ hg clone http://dalai.mshri.on.ca/~jweile/projects/kiloseq/</pre>
+	</code>
+	<p>Change to the cloned directory and use the follwing commands:</p> 
+	<code>
+		<pre>$ ./configure
+$ make
+$ make install</pre>
+	</code>
+	<p>This will build and install the software to your home directory and also download all required R libraries. During the execution of the configure script, you maybe prompted to provide the paths to binaries if the script is unable to find them automatically. By default, this will install the latest <i>stable</i> version of the pipeline. If instead you wish to install the latest <i>development</i> version please use the make target <code>make build_latest</code> during the second command.</p>
+
+
+	<!-- ############### -->
+	<!-- ### RUNNING ### -->
+	<!-- ############### -->
+
+	<h2>Running the software</h2>
+	
+	<p>To run the kiloseq pipeline change to the installation directory (<code>~/kiloseq/</code>) and type</p>
+	<pre><code>./run.sh r1=&lt;list-of-r1-files&gt; r2=&lt;list-of-r2-files&gt; orfDB=&lt;path-to-ORF-index&gt; session=&lt;name&gt;</code></pre>
+	<p>Here, <code>&lt;list-of-r1-files&gt;</code> refers to a comma-separated list of fastq (or fastq.gz) files containing the R1 reads. Ditto for R2 reads. The files should be in corresponding order. The <code>&lt;path-to-ORF-index&gt;</code> should be the path and base name of the bowtie2 index of the target ORF. By default, the pipeline uses <code>res/orfs</code> as the ORF index. To generate a custom index use <code>bowtie2-build</code> on a FASTA file containing your ORF construct. Finally, <code>&lt;name&gt;</code> can be any name for your experiment. It should not contain any spaces or special characters except <code>-</code> or <code>_</code>.</p>
+
+	
+	<details>
+		<summary>How to abort</summary>
+		<p>To abort the pipeline exection you can use the command:</p>
+		<pre><code>./abort.sh</code></pre>
+		<p>This will terminate the master script and delete all jobs associated with your username on the cluster.</p>
+	</details>
+
+	<details>
+		<summary>How to use custom well tags</summary>
+
+		<pre><code>welltags=&lt;path-to-file&gt;</code></pre> 
+		<p>This option can be used to indicate a custom welltag index. To generate an index use <code>bowtie2-build</code> on a FASTA file containing your well tags. By default the pipeline uses the index located in <code>res/welltags</code>.</p>
+	</details>
+
+	<details>
+		<summary>How to use custom barcode scaffolds</summary>
+		<pre><code>snippet=&lt;DNA-sequence&gt;</code></pre>
+		<p>If you use a custom scaffold around your barcodes, you can indicate a snippet of DNA that immediately precedes the barcode in the tag read. Important: If your tag read is a reverse read, the snippet must also be sepecified as the reverse complement. The default value is the reverse complement of the DN2-tag from pNZM: <code>TAGTGCGATTG</code></p>
+	</details>
+
+	<details>
+		<summary>How to use disable barcodes</summary>
+		<p>If your vector does not contain a barcode, you can disable the barcode extraction part of the pipeline using the following option:</p>
+		<pre><code>useBarcodes=&lt;boolean&gt;</code></pre>
+		<p>where <code>&lt;boolean&gt;</code> is TRUE or FALSE.</p>
+	</details>
+
+	<details>
+		<summary>What if my tag read is R1?</summary>
+		<p>You can determine which read will be interpreted as the tag read and which as the ORF read by using the following option:</p>
+		<pre><code>tagOrientation=&lt;read&gt;</code></pre>
+		<p>where <code>&lt;read&gt;</code> is either "R1" or "R2".</p>
+
+	</details>
+
+	<details>
+		<summary>Runtime options</summary>
+
+		<pre><code>chunk.size=&lt;integer&gt;</code></pre>
+		<p>This parameter can be used to set the size of read chunks that are given to each worker process in the pipeline and thus determines how long each of them will take. Smaller chunk sizes will mean that individual jobs will run faster, at the expense of generating more overhead, so that the overall time will likely increase. Larger chunk sizes should have the inverse effect. The default value is 20,000.</p>
+
+		<pre><code>maxQueue=&lt;integer&gt;</code></pre>
+		<p>This option can be used to control the maximum number of jobs to be submitted to the SGE cluster at once in order to allow other users to have fair access to the cluster as well. The default value is 30.</p>
+
+		<pre><code>debug=&lt;boolean&gt;</code></pre>
+		<p>This option can be used to enable debug mode, which means that intermediate results will not be deleted and some additional information may be written to into log files. The values can be either "TRUE" or "FALSE". </p>
+	</details>
+	
+	<h2>Output</h2>
+
+	<p>The output of the pipeline will be found in a folder named according to the session tag you provided together with a timestamp. Inside that folder you will find a subfolder for each pair of FASTQ files you provided (usually representing one plate of samples each), as well as the following comma-separated-value (CSV) files, which can be opened in any spreadsheet application:</p>
+	<pre><code>demuxStats.csv
+calls.csv
+top_calls.csv</code></pre>
+	<p>The file <code>demuxStats.csv</code> contains information on the well-tag demultiplexing success rates. For example:</p>
+	<pre class="file"><code>"set","invalid","undetermined"
+"popcode_explore_2015-03-13_14-38-17/UBE2I-Annealing-Plate-1_R1/",0.0904,0.9095
+"popcode_explore_2015-03-13_14-38-17/UBE2I-Annealing-Plate-2_R1/",0.0754,0.9245
+"popcode_explore_2015-03-13_14-38-17/UBE2I-Annealing-Plate-3_R1/",0.0785,0.9214
+"popcode_explore_2015-03-13_14-38-17/UBE2I-Annealing-Plate-4_R1/",0.1209,0.879
+</code></pre>
+	<p>As you can see, the first column lists the different subfolders based on the given FASTQ file pairs. The second column lists the relative frequency of invalid welltags and finally, the third column lists the relative frequency of undetermined welltags, that is, reads that did not match any known tags.</p>
+
+	<p>The second file, <code>calls.csv</code> contains the complete results for each sample. For example:</p>
+	<pre class="file"><code>"set","well","seq","freq","al.rate","call","dp5"
+"UBE2I-EMLR-AD-Plate-10_R1","A_A01","AATAGTGGAGTAAGATTCCGAGCGG",0.742404792468977,0.397118155619597,"Low coverage!",0.529790660225443
+"UBE2I-EMLR-AD-Plate-10_R1","A_A01","GTATTGATGACGAGGCGCTGCGCAC",0.0201112537441164,0,"No alignment!",0
+"UBE2I-EMLR-AD-Plate-10_R1","A_A02","ATCACCTGTTGTATCCAAGCTTCTT",0.353037097431716,0.344867358708189,"Low coverage!",0.597423510466989
+"UBE2I-EMLR-AD-Plate-10_R1","A_A02","TGTCAGGTCGGTAACGCTCCCATAG",0.350183448838157,0.332363213038417,"Low coverage!",0.57487922705314
+"UBE2I-EMLR-AD-Plate-10_R1","A_A02","AGGGGATGAGGATGCACAAGTGAAA",0.0578883000407664,0.454225352112676,"Low coverage!",0.470209339774557
+"UBE2I-EMLR-AD-Plate-10_R1","A_A02","GTATTGATGACGAGGCGCTGCGCAC",0.0230330207908683,0,"No alignment!",0
+"UBE2I-EMLR-AD-Plate-10_R1","A_A02","ATATCGGTACGGTGATTGATAACGA",0.0103954341622503,0,"No alignment!",0
+"UBE2I-EMLR-AD-Plate-10_R1","A_A02","GCCTGCCGATGAATAAAGAAACCAG",0.0101916021198532,0,"No alignment!",0
+"UBE2I-EMLR-AD-Plate-10_R1","A_A03","GCCACAGTCATATATCTGCCCGAGT",0.703530979347102,0.428503787878788,"Low coverage!",0.595813204508857</code></pre>
+
+	<p>The first column contains the plate information (based on the pairs of FASTQ files you provided). The second column lists the well coordinates of the demultiplexed samples. The third column shows a barcode sequence that was detected in that well. The fourth column shows the relative frequency of the aforementioned barcode in that well, i.e. the number of reads in the well that match the barcode divided by the total number of reads in that well. The fifth column lists the relative frequency of reads that aligned to the ORF, i.e. the number of reads in the given well associated with the given barcode that align to the ORF, divided by the total number of reads in the given well associated with the given barcode. The sixth column lists the share of the ORF sequence that are covered at least 5X deep by these reads. Finally, the last column lists the output of the variant caller on the ORF sequence. If no reads were available, it will show the message "No alignment!", if an insufficient share of the ORF is covered at least 5X deep it will show the message "Low coverage!". Otherwise it will list the mutations that were detected within the ORF that passed the significance threshold.</p>
+
+	<div style="margin-top: 100px; font-size: 8pt;text-align:center;">
+		<p><a href="http://creativecommons.org/licenses/by-sa/4.0/">CC-BY-SA</a> The Roth Lab, University of Toronto, 2015</p>
+	</div>
+
+</body>
+</html>
+
+
+
+

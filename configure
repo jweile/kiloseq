@@ -46,7 +46,7 @@ function checkNoParam {
 
 
 check Rscript "version 3"
-check blastn "blastn: 2.2" "-version"
+# check blastn "blastn: 2.2" "-version"
 check bowtie2 "version 2"
 check qstat "SGE 6|OGS/GE 2011" "-help"
 # check java "version \"1.7" "-version"

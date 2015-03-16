@@ -10,8 +10,8 @@ buildDir=$2
 #read bin locations from cfg.bin
 declare -A bins=(
   ["Rbin"]=`grep Rscript $config|cut -d, -f2` 
-  ["BLASTbin"]=`grep blast $config|cut -d, -f2` 
-  ["SGEbin"]=`grep Rscript $config|cut -d, -f2`
+  # ["BLASTbin"]=`grep blast $config|cut -d, -f2` 
+  ["SGEbin"]=`grep qstat $config|cut -d, -f2`
   ["BowtieBin"]=`grep bowtie2 $config|cut -d, -f2`
   # ["JavaBin"]=`grep java $config|cut -d, -f2`
   # ["SNVerBin"]=`grep SNVer $config|cut -d, -f2`
