@@ -298,7 +298,7 @@ all.calls <- do.call(rbind,lapply(1:nrow(top.clusters), function(cluster.idx) {
 write.table(
 	all.calls,
 	paste(dir.name,"calls.csv",sep=""),
-	sep=",",quote=FALSE,row.names=FALSE
+	sep=",",quote=TRUE,row.names=FALSE
 )
 
 
