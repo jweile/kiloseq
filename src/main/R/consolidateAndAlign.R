@@ -177,13 +177,17 @@ ref.con <- file(orf.fa,open="r")
 ref.seq <- readFASTA(ref.con)[[1]]
 close(ref.con)
 
-out <- do.call(rbind,lapply(segregated.or.files, function(orf.read.file) {
+all.calls <- do.call(rbind,lapply(1:nrow(top.clusters), function(cluster.idx) {
+
+	orf.read.file <- segregated.or.files[[cluster.idx]]
+	bc.info <- top.clusters[cluster.idx,]
 
 	#Alignment
 	sam.file <- bowtie(orf.read.file, orf.db, 
 		purge=FALSE, parse=FALSE, header=TRUE, short=FALSE,
 		debug.mode=debug.mode
 	)
+	#Look into SAM file to compute alignment effeciency
 	sam <- read.delim(sam.file,stringsAsFactors=FALSE,comment.char="@",header=FALSE)
 	colnames(sam) <- c(
 		"cname","flag","rname","pos","mapq","cigar","mrnm","mpos",
@@ -191,34 +195,88 @@ out <- do.call(rbind,lapply(segregated.or.files, function(orf.read.file) {
 	)
 	al.rate <- 1-(sum(sam$rname == "*")/nrow(sam))
 	if (al.rate == 0) {
-		return(list(call="No alignment!",al.rate=al.rate,dp5=0))
+		return(cbind(bc.info,data.frame(
+			al.rate=al.rate,
+			dp5=0,
+			call="No alignment!",
+			share=NA,
+			stringsAsFactors=FALSE
+		)))
 	}
 
-	#Variant Caller
-	vcf <- call.variants(sam.file,orf.fa)
-	#Process results
-	dp <- as.numeric(extract.groups(vcf$info,"DP=(\\d+)")[,1])
-	depth <- sapply(1:length(ref.seq), function(i) {
-		if (i %in% vcf$pos) {
-			dp[[which(vcf$pos == i)[[1]]]]
-		} else {
-			0
-		}
-	})
-	dp5 <- sum(depth > 5)/length(ref.seq)
-	if (sum(depth < 5) > 10) {
-		return(list(call="Low coverage!",al.rate=al.rate,dp5=dp5))
+	# Variant Caller
+	variants <- call.variants(sam.file,orf.fa)
+	dp5.abs <- sum(variants$depth < 5)
+	dp5 <- 1- dp5.abs/length(ref.seq)
+	if (dp5.abs > 10) {
+		return(cbind(bc.info,data.frame(
+			al.rate=al.rate,
+			dp5=dp5,
+			call="Low coverage!"
+			,share=NA,
+			stringsAsFactors=FALSE
+		)))
 	}
-	#TODO: Exctract significant SNPs and translate!
-	return(list(call="Good!",al.rate=al.rate,dp5=dp5))
+
+	#export variant calls
+	vcalls <- variants$calls
+	write.table(
+		vcalls,
+		paste(dir.name,"varcalls.csv",sep=""),
+		sep=",",quote=FALSE,row.names=FALSE
+	)
+
+	#cluster calls based on frequency
+	cm <- new.cluster.map(nrow(vcalls))
+	for (i in 2:nrow(vcalls)) {
+		for (j in 1:(i-1)) {
+			fdist <- abs(vcalls$freq[[i]] - vcalls$freq[[j]])
+			if (fdist < .05) {
+				cm$addLink(i,j)
+			}
+		}
+	}
+	out <- do.call(rbind,lapply(cm$getClusters(), function(is) {
+		freq <- mean(vcalls$freq[is])
+		is <- is[order(vcalls$pos[is])]
+		mutstr <- paste(sapply(is, function(i) {
+			with(vcalls, paste(ref[[i]],pos[[i]],alt[[i]],sep=""))
+		}),collapse=",")
+		cbind(bc.info,data.frame(
+			al.rate=al.rate,
+			dp5=dp5,
+			call=mutstr,
+			share=freq,
+			stringsAsFactors=FALSE
+		))
+	}))
+
+	return(out[order(out$share,decreasing=TRUE),])
+
+	# vcf <- call.variants(sam.file,orf.fa)
+	# #Process results
+	# dp <- as.numeric(extract.groups(vcf$info,"DP=(\\d+)")[,1])
+	# depth <- sapply(1:length(ref.seq), function(i) {
+	# 	if (i %in% vcf$pos) {
+	# 		dp[[which(vcf$pos == i)[[1]]]]
+	# 	} else {
+	# 		0
+	# 	}
+	# })
+	# dp5 <- sum(depth > 5)/length(ref.seq)
+	# if (sum(depth < 5) > 10) {
+	# 	return(list(call="Low coverage!",al.rate=al.rate,dp5=dp5))
+	# }
+	# #TODO: Exctract significant SNPs and translate!
+	# return(list(call="Good!",al.rate=al.rate,dp5=dp5))
 }))
 
-top.clusters[,"al.rate"] <- unlist(out[,"al.rate"])
-top.clusters[,"dp5"] <- unlist(out[,"dp5"])
-top.clusters[,"call"] <- unlist(out[,"call"])
+# top.clusters[,"al.rate"] <- unlist(out[,"al.rate"])
+# top.clusters[,"dp5"] <- unlist(out[,"dp5"])
+# top.clusters[,"call"] <- unlist(out[,"call"])
 
 write.table(
-	top.clusters,
+	all.calls,
 	paste(dir.name,"calls.csv",sep=""),
 	sep=",",quote=FALSE,row.names=FALSE
 )

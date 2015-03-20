@@ -449,52 +449,181 @@ bowtie <- function(fastq.file, db.file,
 }
 
 call.variants <- function(sam.file, ref.file) {
-	vcf.file <- sub(".sam$",".vcf",sam.file)
+	pileup.file <- sub(".sam$",".pileup",sam.file)
 	tryCatch({
 		exitCode <- system(paste(
 			"$SAMtoolsBin view -b -S",sam.file,"|",
 			"$SAMtoolsBin sort -o - - |",
-			"$SAMtoolsBin mpileup -g -f",ref.file,"- |",
-			"$BCFtoolsBin view -c - >",
-			vcf.file
+			"$SAMtoolsBin mpileup -s -f",ref.file,"- >",
+			pileup.file
 		))
 		if (exitCode != 0) {
 			stop("Error executing SAMtools!")
 		}
+		con <- file(ref.file,open="r")
+		ref.length <- length(readFASTA(con)[[1]])
 	},
 	error=function(e) {
 		logger$fatal(e)
 		stop(e)
+	},
+	finally={
+		if (exists("con") && isOpen(con)) {
+			close(con)
+		}
 	})
-	vcf <- read.delim(vcf.file,stringsAsFactors=FALSE,comment.char="#",header=FALSE)
-	colnames(vcf) <- c("gene","pos","id","ref","alt","qual","filter","info","format","-")
-	vcf
+	pu <- parsePileup(pileup.file)
+	var.call(simplifyPileup(pu),pu$ref,pu$indels,ref.length)
 }
 
-# ####
-# # Function for safely running SNVer
-# # sam.file = input SAM alignment
-# # reference.file = FASTA file that served as the reference of the alignment.
-# #
-# snver <- function(sam.file,reference.file) {
-# 	vcf.base <- sub(".sam","",sam.file)
-# 	tryCatch(
-# 		exitCode <- system(paste(
-# 			"$JavaBin -jar $SNVerBin -r",reference.file,"-n 2",
-# 			"-o",vcf.base,"-i",sam.file,"-u 20"
-# 		)),
-# 		error=function(e) {
-# 			logger$fatal(e)
-# 			stop(e)
-# 		}
-# 	)
-# 	if (exitCode != 0) {
-# 		e <- simpleError("Error executing SNVer!")
-# 		logger$fatal(e)
-# 		stop(e)
-# 	}
-	
-# }
+parsePileup <- function(f) {
+    #read file
+    pu <- read.delim(f,stringsAsFactors=FALSE,header=FALSE)
+    colnames(pu) <- c("refname","pos","ref","depth","matches","rqual","mqual")
+    #convert quality scores
+    pu$rqual <- lapply(pu$rqual, function(qstr) as.integer(charToRaw(qstr))-33)
+    pu$mqual <- lapply(pu$mqual, function(qstr) as.integer(charToRaw(qstr))-33)
+    #parse matches
+    re <- "(\\^.)?([\\+-]\\d+)?([\\.,actgnACTGN\\*])(\\$)?"
+    parsed <- global.extract.groups(pu$matches,re)
+    #clean up indels
+    matches <- lapply(parsed, function(m) {
+        indel.starts <- which(m[,2] != "")
+        if (length(indel.starts) > 0) {
+            for (i in 1:length(indel.starts)) {
+                is <- indel.starts[[i]]
+                indel <- m[is,2]
+                l <- as.integer(substr(indel,2,nchar(indel)))
+                val <- paste(substr(indel,1,1),paste(m[is:(is+l-1),3],collapse=""),sep="")
+                m[is,3] <- val
+                if (l > 1) {
+                    m <- m[-((is+1):(is+l-1)),]
+                    indel.starts[(i+1):length(indel.starts)] <- indel.starts[(i+1):length(indel.starts)] -l + 1
+                }
+            }
+        }
+        m[,3]
+    })
+    #split indels from matches
+    indels <- lapply(matches, function(m){
+        idx <- substr(m,1,1) %in% c("+","-")
+        m[idx]
+    })
+    matches <- lapply(matches,function(m){
+        idx <- substr(m,1,1) %in% c("+","-")
+        m[!idx]
+    })
+    pu$matches <- matches
+    pu$indels <- ""
+    pu$indels <- indels
+    pu
+}
+
+simplifyPileup <- function(pu,onlyFwd=FALSE) {
+    piles <- lapply(1:nrow(pu), function(i) {
+        ref <- pu$ref[[i]]
+        pile <- to.df(do.call(rbind,mapply(
+            function(m,rqual,mqual) {
+                if (onlyFwd && m %in% c(",","a","c","g","t")) {
+                    return(NULL)
+                } else {
+                    p <- 1-(1-10^(-rqual/10))*(1-10^(-mqual/10))
+                    if (m %in% c(",",".")) {
+                        return(list(base=ref,p=p))
+                    } else {
+                        return(list(base=toupper(m),p=p))
+                    }
+                }
+            },
+            m=pu$matches[[i]],
+            rqual=pu$rqual[[i]],
+            mqual=pu$mqual[[i]],
+            SIMPLIFY=FALSE
+        )))
+        #remove absolutes
+        pile$p[pile$p == 0] <- 0.0001
+        pile$p[pile$p == 1] <- 0.999
+        pile
+    })
+    names(piles) <- pu$pos
+    piles
+}
+
+var.call <- function(piles, ref, indel.track, ref.length, threshold=.05) {
+    bases <- c("A","C","G","T","*")
+    freqs <- do.call(rbind,lapply(piles, function(pile.i) {
+        fpile <- pile.i[pile.i$p < threshold,]
+        table(factor(fpile$base,levels=bases))
+    }))
+    d <- apply(freqs,1,sum)
+    names(d) <- names(piles)
+
+    #check indels
+    indel.idxs <- which(sapply(indel.track,length) > 0)
+    called.indels <- to.df(do.call(rbind,lapply(indel.idxs, function(i) {
+    	indel.freqs <- table(toupper(indel.track[[i]]))
+    	do.call(rbind,lapply(names(indel.freqs), function(indel) {
+    		f <- indel.freqs[[indel]]
+    		if (f > 1 && f/d[[i]] > threshold) {
+    			list(ref=ref[[i]],pos=names(piles)[[i]],alt=indel,freq=f/d[[i]])
+    		} else {
+    			NULL
+    		}
+    	}))
+    })))
+
+    #check SNVs
+    skimmed.freqs <- apply(freqs,c(1,2), function(x)if(x < 2) 0 else x)
+    calls <- lapply(1:nrow(freqs), function(i) {
+        f <- skimmed.freqs[i,]/d[[i]]
+        nonref <- f[setdiff(bases,ref[[i]])]
+        nonref[!is.na(nonref) & nonref > threshold]
+    })
+
+    idxs <- which(sapply(calls,length) > 0)
+    called.snvs <- to.df(do.call(rbind,lapply(idxs, function(i) {
+        pos <- as.numeric(names(piles)[[i]])
+        vars <- calls[[i]]
+        ref <- ref[[i]]
+        do.call(rbind,lapply(names(vars), function(base) 
+            list(ref=ref,pos=pos,alt=base,freq=vars[[base]])
+        ))
+    })))
+
+    #create depth vector for all positions (including those not in alignment)
+    d.all <- sapply(as.character(1:ref.length), function(pos) if (pos %in% names(d)) d[[pos]] else 0)
+
+    list(calls=rbind(called.snvs,called.indels),depth=d.all)
+}
+
+base.posteriors <- function(piles) {
+    do.call(rbind,lapply(piles, function(pile.i) {
+        #possible bases
+        qis <- c("A","C","G","T","*")
+        posteriors <- sapply(qis, function(qi) {
+            #skip impossible bases
+            if (!(qi %in% pile.i$base)) {
+                return (0)
+            }
+            # compute the log-odds by iterating over all symbols at the pileup position
+            lo.i <- sum(sapply(1:nrow(pile.i), function(j){
+                #the base symbol
+                bij <- pile.i$base[[j]]
+                #the error probability
+                pij <- pile.i$p[[j]]
+                #calculate the Bayes factor
+                if (qi==bij) {
+                    log(1-pij) - log(pij/3)
+                } else {
+                    log(pij/3) - log(1/3)
+                }
+            })) + log(1/length(qis))
+            # then transform the log-odds to the probability
+            # being careful to avoid NaNs
+            if (lo.i > 38) 1 else exp(lo.i)/(1+exp(lo.i))
+        })
+    }))
+}
 
 
 

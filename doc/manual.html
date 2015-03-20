@@ -164,6 +164,8 @@ top_calls.csv</code></pre>
 
 	<p>The first column contains the plate information (based on the pairs of FASTQ files you provided). The second column lists the well coordinates of the demultiplexed samples. The third column shows a barcode sequence that was detected in that well. The fourth column shows the relative frequency of the aforementioned barcode in that well, i.e. the number of reads in the well that match the barcode divided by the total number of reads in that well. The fifth column lists the relative frequency of reads that aligned to the ORF, i.e. the number of reads in the given well associated with the given barcode that align to the ORF, divided by the total number of reads in the given well associated with the given barcode. The sixth column lists the share of the ORF sequence that are covered at least 5X deep by these reads. Finally, the last column lists the output of the variant caller on the ORF sequence. If no reads were available, it will show the message "No alignment!", if an insufficient share of the ORF is covered at least 5X deep it will show the message "Low coverage!". Otherwise it will list the mutations that were detected within the ORF that passed the significance threshold.</p>
 
+	<p>The third file, <code>top_calls.csv</code> is structured just like the previous file, except for each well it only lists the most frequent barcode.</p>
+
 	<div style="margin-top: 100px; font-size: 8pt;text-align:center;">
 		<p><a href="http://creativecommons.org/licenses/by-sa/4.0/">CC-BY-SA</a> The Roth Lab, University of Toronto, 2015</p>
 	</div>

@@ -83,13 +83,15 @@ extract.groups <- function(x, re) {
 # re = regular expression with groups
 #
 global.extract.groups <- function(x,re) {
-	all.matches <- gregexpr(re,x,perl=TRUE)
-	mapply(function(matches,x) {
-		start <- attr(matches,"capture.start")
-		end <- start + attr(matches,"capture.length") - 1
-		apply(zbind(start,end),c(1,2),function(pos) substr(x,pos[[1]],pos[[2]]) )
-	},matches=all.matches,x=x)
+    all.matches <- gregexpr(re,x,perl=TRUE)
+    mapply(function(matches,x) {
+        start <- attr(matches,"capture.start")
+        end <- start + attr(matches,"capture.length") - 1
+        apply(zbind(start,end),c(1,2),function(pos) substr(x,pos[[1]],pos[[2]]) )
+    },matches=all.matches,x=x,SIMPLIFY=FALSE)
 }
+
+
 
 
 #Function for returning the i'th ranked item in a list
@@ -139,6 +141,18 @@ mcc <- function(t, scores, truth) {
 # 	mat
 # }
 
+
+###
+# turn rbound lists in to a dataframe
+#
+to.df <- function(x) {
+	if (is.null(x)) return(NULL)
+	y <- lapply(1:ncol(x), function(col) {
+		unlist(x[,col])
+	})
+	names(y) <- colnames(x)
+	as.data.frame(y,stringsAsFactors=FALSE)
+}
 
 ###
 # Binds matrices of same size together to a 3D matrix, analogously
