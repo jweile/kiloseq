@@ -478,7 +478,7 @@ call.variants <- function(sam.file, ref.file) {
 
 parsePileup <- function(f) {
     #read file
-    pu <- read.delim(f,stringsAsFactors=FALSE,header=FALSE)
+    pu <- read.delim(f,stringsAsFactors=FALSE,header=FALSE,quote="")
     colnames(pu) <- c("refname","pos","ref","depth","matches","rqual","mqual")
     #convert quality scores
     pu$rqual <- lapply(pu$rqual, function(qstr) as.integer(charToRaw(qstr))-33)

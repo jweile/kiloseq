@@ -212,8 +212,8 @@ all.calls <- do.call(rbind,lapply(1:nrow(top.clusters), function(cluster.idx) {
 		return(cbind(bc.info,data.frame(
 			al.rate=al.rate,
 			dp5=dp5,
-			call="Low coverage!"
-			,share=NA,
+			call="Low coverage!",
+			share=NA,
 			stringsAsFactors=FALSE
 		)))
 	}
@@ -225,6 +225,26 @@ all.calls <- do.call(rbind,lapply(1:nrow(top.clusters), function(cluster.idx) {
 		paste(dir.name,"varcalls.csv",sep=""),
 		sep=",",quote=FALSE,row.names=FALSE
 	)
+
+	if (nrow(vcalls)==0) {
+		return(cbind(bc.info,data.frame(
+			al.rate=al.rate,
+			dp5=dp5,
+			call="WT",
+			share=1,
+			stringsAsFactors=FALSE
+		)))
+	}
+
+	if (nrow(vcalls)==1) {
+		return(cbind(bc.info,data.frame(
+			al.rate=al.rate,
+			dp5=dp5,
+			call=with(vcalls, paste(ref[[1]],pos[[1]],alt[[1]],sep="")),
+			share=vcalls$freq[[1]],
+			stringsAsFactors=FALSE
+		)))
+	}
 
 	#cluster calls based on frequency
 	cm <- new.cluster.map(nrow(vcalls))
