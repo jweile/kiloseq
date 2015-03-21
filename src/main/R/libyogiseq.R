@@ -555,10 +555,11 @@ var.call <- function(piles, ref, indel.track, ref.length, threshold=.05) {
         fpile <- pile.i[pile.i$p < threshold,]
         table(factor(fpile$base,levels=bases))
     }))
-    d <- apply(freqs,1,sum)
+    d <- apply(freqs,1,sum) + sapply(indel.track,length)
     names(d) <- names(piles)
 
     #check indels
+    indel.track <- lapply(indel.track, toupper)
     indel.idxs <- which(sapply(indel.track,length) > 0)
     called.indels <- to.df(do.call(rbind,lapply(indel.idxs, function(i) {
     	indel.freqs <- table(toupper(indel.track[[i]]))
