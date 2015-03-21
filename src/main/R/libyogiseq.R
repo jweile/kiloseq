@@ -473,7 +473,7 @@ call.variants <- function(sam.file, ref.file) {
 		}
 	})
 	pu <- parsePileup(pileup.file)
-	var.call(simplifyPileup(pu),pu$ref,pu$indels,ref.length)
+	var.call(simplifyPileup(pu),toupper(pu$ref),pu$indels,ref.length)
 }
 
 parsePileup <- function(f) {
@@ -521,7 +521,7 @@ parsePileup <- function(f) {
 
 simplifyPileup <- function(pu,onlyFwd=FALSE) {
     piles <- lapply(1:nrow(pu), function(i) {
-        ref <- pu$ref[[i]]
+        ref <- toupper(pu$ref[[i]])
         pile <- to.df(do.call(rbind,mapply(
             function(m,rqual,mqual) {
                 if (onlyFwd && m %in% c(",","a","c","g","t")) {
