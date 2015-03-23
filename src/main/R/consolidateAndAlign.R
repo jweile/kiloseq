@@ -51,6 +51,25 @@ write.fastq <- function(f,seqs) {
 	})
 }
 
+#Given a number of frequency measurements with different
+# sample sizes, what is the most likely joint frequency and 
+# what is the probability of the observations given the joint freq.
+joint.freq <- function(fs, ns) {
+	if (length(fs)==1) {
+		return(c(jf=fs,p=NA))
+	}
+	#max likelihood joint frequency
+	jf <- sum(fs*ns)/sum(ns)
+	#distances from joint frequency
+	ds <- abs(fs-jf)
+	#standard errors
+	se <- (.5-4/3*(fs-.5)^2)/sqrt(ns)
+	#probabilities
+	ps <- pnorm(jf-ds,jf,se,lower.tail=TRUE) + pnorm(jf+ds,jf,se,lower.tail=FALSE)
+	c(jf=jf,p=prod(ps))
+}
+
+
 # Working directory
 dir.name <- getArg("dir",required=TRUE)
 if (regexpr("/$",dir.name) < 1) {
@@ -200,6 +219,7 @@ all.calls <- do.call(rbind,lapply(1:nrow(top.clusters), function(cluster.idx) {
 			dp5=0,
 			call="No alignment!",
 			share=NA,
+			cluster.p=NA,
 			stringsAsFactors=FALSE
 		)))
 	}
@@ -214,6 +234,7 @@ all.calls <- do.call(rbind,lapply(1:nrow(top.clusters), function(cluster.idx) {
 			dp5=dp5,
 			call="Low coverage!",
 			share=NA,
+			cluster.p=NA,
 			stringsAsFactors=FALSE
 		)))
 	}
@@ -232,6 +253,7 @@ all.calls <- do.call(rbind,lapply(1:nrow(top.clusters), function(cluster.idx) {
 			dp5=dp5,
 			call="WT",
 			share=1,
+			cluster.p=NA,
 			stringsAsFactors=FALSE
 		)))
 	}
@@ -246,22 +268,50 @@ all.calls <- do.call(rbind,lapply(1:nrow(top.clusters), function(cluster.idx) {
 			dp5=dp5,
 			call=mutstr,
 			share=vcalls$freq[[1]],
+			cluster.p=NA,
 			stringsAsFactors=FALSE
 		)))
 	}
 
-	#cluster calls based on frequency
+	#TODO: Check for mutations outside of ORF sequence
+
+	##
+	# CLUSTER CALLS BASED ON FREQUENCY
+	##
+
+	# rank by pairwise similarity
+	depth <- variants$depth
+	vpairs <- do.call(rbind,lapply(2:nrow(vcalls),function(i) {
+		do.call(rbind,lapply(1:(i-1), function(j) {
+			fs <- c(vcalls$freq[[i]],vcalls$freq[[j]])
+			ns <- c(depth[vcalls$pos[[i]]],depth[vcalls$pos[[j]]])
+			jf <- joint.freq(fs,ns)
+			data.frame(i=i,j=j,p=jf["p"])
+		}))
+	}))
+	vpairs <- vpairs[order(vpairs$p,decreasing=TRUE),]
+	# Join clusters if probability of joint frequency > 0.5
 	cm <- new.cluster.map(nrow(vcalls))
-	for (i in 2:nrow(vcalls)) {
-		for (j in 1:(i-1)) {
-			fdist <- abs(vcalls$freq[[i]] - vcalls$freq[[j]])
-			if (fdist < .05) {
-				cm$addLink(i,j)
-			}
+	invisible(apply(vpairs, 1, function(vpair) {
+		i <- vpair["i"]
+		j <- vpair["j"]
+		if (cm$getIdxOf(i) == cm$getIdxOf(j)) {
+			return
 		}
-	}
+		is <- cm$getClusters()[[cm$getIdxOf(i)]]
+		js <- cm$getClusters()[[cm$getIdxOf(j)]]
+		fs <- c(vcalls$freq[is],vcalls$freq[js])
+		ns <- c(depth[vcalls$pos[is]],depth[vcalls$pos[js]])
+		jf <- joint.freq(fs,ns)
+		if (jf["p"] >= .5) {
+			cm$addLink(i,j)
+		}
+	}))
+
 	out <- do.call(rbind,lapply(cm$getClusters(), function(is) {
-		freq <- mean(vcalls$freq[is])
+		fs <- vcalls$freq[is]
+		ns <- depth[vcalls$pos[is]]
+		jf <- joint.freq(fs,ns)
 		is <- is[order(vcalls$pos[is])]
 		mutstr <- toupper(paste(sapply(is, function(i) {
 			with(vcalls, paste(ref[[i]],pos[[i]],alt[[i]],sep=""))
@@ -273,7 +323,8 @@ all.calls <- do.call(rbind,lapply(1:nrow(top.clusters), function(cluster.idx) {
 			al.rate=al.rate,
 			dp5=dp5,
 			call=mutstr,
-			share=freq,
+			share=jf[["jf"]],
+			cluster.p=jf[["p"]],
 			stringsAsFactors=FALSE
 		))
 	}))

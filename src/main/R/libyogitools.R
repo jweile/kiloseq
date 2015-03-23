@@ -197,5 +197,5 @@ new.cluster.map <- function(n) {
 
 	getClusters <- function() .clusters
 
-	list(addLink=addLink, getClusters=getClusters)
+	list(addLink=addLink, getClusters=getClusters, getIdxOf=.getIdx)
 }
