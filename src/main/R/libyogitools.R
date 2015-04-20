@@ -165,6 +165,25 @@ zbind <- function(...) {
 	y
 }
 
+####
+# converting between plate coordinate systems
+#
+q2c <- function(x) {
+	q <- which(LETTERS==substr(x,1,1))
+	r <- which(LETTERS==substr(x,3,3))
+	c <- as.numeric(substr(x,4,nchar(x)))
+	.r <- r*2 - q%%2
+	.c <- c*2 - (q<3)
+	paste(LETTERS[[.r]],sprintf("%02d",.c),sep="")
+}
+c2q <- function(x) {
+	r <- which(LETTERS==substr(x,1,1))
+	c <- as.numeric(substr(x,2,nchar(x)))
+	.r <- ceiling(r/2)
+	.c <- ceiling(c/2)
+	.q <- ((r-1)%%2)*2 + (c-1)%%2+1
+	paste(LETTERS[[.q]],"_",LETTERS[[.r]],sprintf("%02d",.c),sep="")
+}
 
 
 ###
