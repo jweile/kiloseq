@@ -80,6 +80,7 @@ job.id <- getArg("id",required=TRUE)
 # ORF Sequence DB
 orf.db <- getArg("orfDB",required=TRUE)
 orf.fa <- paste(orf.db,".fa",sep="")
+orf.bed <- paste(orf.db,".bed",sep="")
 
 # Whether or not to expect barcodes in the tag reads.
 use.barcodes <- as.logical(getArg("useBarcodes",default=TRUE))
@@ -196,6 +197,10 @@ ref.con <- file(orf.fa,open="r")
 ref.seq <- readFASTA(ref.con)[[1]]
 close(ref.con)
 
+orf.pos <- read.delim(orf.bed,stringsAsFactors=FALSE,header=FALSE)
+colnames(orf.pos) <- c("chrom","from","to","name")
+orf.pos <- orf.pos[orf.pos$name=="ORF",c("from","to")]
+
 all.calls <- do.call(rbind,lapply(1:nrow(top.clusters), function(cluster.idx) {
 
 	orf.read.file <- segregated.or.files[[cluster.idx]]
@@ -263,6 +268,10 @@ all.calls <- do.call(rbind,lapply(1:nrow(top.clusters), function(cluster.idx) {
 		if (regexpr("[\\*\\+-]",mutstr)>0) {
 			mutstr <- paste("Frameshift:",mutstr)
 		}
+		pos <- vcalls$pos[[1]]
+		if (pos < orf.pos$from || pos > orf.pos$to) {
+			mutstr <- paste("Corrupt:",mutstr)
+		}
 		return(cbind(bc.info,data.frame(
 			al.rate=al.rate,
 			dp5=dp5,
@@ -318,6 +327,10 @@ all.calls <- do.call(rbind,lapply(1:nrow(top.clusters), function(cluster.idx) {
 		}),collapse=","))
 		if (regexpr("[\\*\\+-]",mutstr)>0) {
 			mutstr <- paste("Frameshift:",mutstr)
+		}
+		pos <- vcalls$pos[is]
+		if (any(pos < orf.pos$from) || any(pos > orf.pos$to)) {
+			mutstr <- paste("Corrupt:",mutstr)
 		}
 		cbind(bc.info,data.frame(
 			al.rate=al.rate,
