@@ -448,20 +448,115 @@ bowtie <- function(fastq.file, db.file,
 	}
 }
 
+# call.variants <- function(sam.file, ref.file) {
+# 	pileup.file <- sub(".sam$",".pileup",sam.file)
+# 	tryCatch({
+# 		exitCode <- system(paste(
+# 			"$SAMtoolsBin view -b -S",sam.file,"|",
+# 			"$SAMtoolsBin sort -o - - |",
+# 			"$SAMtoolsBin mpileup -s -f",ref.file,"- >",
+# 			pileup.file
+# 		))
+# 		if (exitCode != 0) {
+# 			stop("Error executing SAMtools!")
+# 		}
+# 		con <- file(ref.file,open="r")
+# 		ref.length <- length(readFASTA(con)[[1]])
+# 	},
+# 	error=function(e) {
+# 		logger$fatal(e)
+# 		stop(e)
+# 	},
+# 	finally={
+# 		if (exists("con") && isOpen(con)) {
+# 			close(con)
+# 		}
+# 	})
+# 	pu <- parsePileup(pileup.file)
+# 	var.call(simplifyPileup(pu),toupper(pu$ref),pu$indels,ref.length)
+# }
+
+# parsePileup <- function(f) {
+#     #read file
+#     pu <- read.delim(f,stringsAsFactors=FALSE,header=FALSE,quote="")
+#     colnames(pu) <- c("refname","pos","ref","depth","matches","rqual","mqual")
+#     #convert quality scores
+#     pu$rqual <- lapply(pu$rqual, function(qstr) as.integer(charToRaw(qstr))-33)
+#     pu$mqual <- lapply(pu$mqual, function(qstr) as.integer(charToRaw(qstr))-33)
+#     #parse matches
+#     re <- "(\\^.)?([\\+-]\\d+)?([\\.,actgnACTGN\\*])(\\$)?"
+#     parsed <- global.extract.groups(pu$matches,re)
+#     #clean up indels
+#     matches <- lapply(parsed, function(m) {
+#         indel.starts <- which(m[,2] != "")
+#         if (length(indel.starts) > 0) {
+#             for (i in 1:length(indel.starts)) {
+#                 is <- indel.starts[[i]]
+#                 indel <- m[is,2]
+#                 l <- as.integer(substr(indel,2,nchar(indel)))
+#                 val <- paste(substr(indel,1,1),paste(m[is:(is+l-1),3],collapse=""),sep="")
+#                 m[is,3] <- val
+#                 if (l > 1) {
+#                     m <- m[-((is+1):(is+l-1)),]
+#                     indel.starts[(i+1):length(indel.starts)] <- indel.starts[(i+1):length(indel.starts)] -l + 1
+#                 }
+#             }
+#         }
+#         m[,3]
+#     })
+#     #split indels from matches
+#     indels <- lapply(matches, function(m){
+#         idx <- substr(m,1,1) %in% c("+","-")
+#         m[idx]
+#     })
+#     matches <- lapply(matches,function(m){
+#         idx <- substr(m,1,1) %in% c("+","-")
+#         m[!idx]
+#     })
+#     pu$matches <- matches
+#     pu$indels <- ""
+#     pu$indels <- indels
+#     pu
+# }
+
+# simplifyPileup <- function(pu,onlyFwd=FALSE,disregardMqual=TRUE) {
+#     piles <- lapply(1:nrow(pu), function(i) {
+#         ref <- toupper(pu$ref[[i]])
+#         pile <- to.df(do.call(rbind,mapply(
+#             function(m,rqual,mqual) {
+#                 if (onlyFwd && m %in% c(",","a","c","g","t")) {
+#                     return(NULL)
+#                 } else {
+#                     p <- if (disregardMqual) {
+#                         10^(-rqual/10)
+#                     } else {
+#                         1-(1-10^(-rqual/10))*(1-10^(-mqual/10))
+#                     }
+#                     if (m %in% c(",",".")) {
+#                         return(list(base=ref,p=p))
+#                     } else {
+#                         return(list(base=toupper(m),p=p))
+#                     }
+#                 }
+#             },
+#             m=pu$matches[[i]],
+#             rqual=pu$rqual[[i]],
+#             mqual=pu$mqual[[i]],
+#             SIMPLIFY=FALSE
+#         )))
+#         #remove absolutes
+#         pile$p[pile$p == 0] <- 0.0001
+#         pile$p[pile$p == 1] <- 0.999
+#         pile
+#     })
+#     names(piles) <- pu$pos
+#     piles
+# }
+
 call.variants <- function(sam.file, ref.file) {
-	pileup.file <- sub(".sam$",".pileup",sam.file)
 	tryCatch({
-		exitCode <- system(paste(
-			"$SAMtoolsBin view -b -S",sam.file,"|",
-			"$SAMtoolsBin sort -o - - |",
-			"$SAMtoolsBin mpileup -s -f",ref.file,"- >",
-			pileup.file
-		))
-		if (exitCode != 0) {
-			stop("Error executing SAMtools!")
-		}
 		con <- file(ref.file,open="r")
-		ref.length <- length(readFASTA(con)[[1]])
+		ref.seq <- readFASTA(con)[[1]]
 	},
 	error=function(e) {
 		logger$fatal(e)
@@ -472,81 +567,104 @@ call.variants <- function(sam.file, ref.file) {
 			close(con)
 		}
 	})
-	pu <- parsePileup(pileup.file)
-	var.call(simplifyPileup(pu),toupper(pu$ref),pu$indels,ref.length)
+	
+	pu <- sam2pileup(sam.file,ref.file)
+	var.call(
+		pu$pileup, 
+		to.char.array(toupper(ref.seq$toString())),
+		pu$indel.track,
+		length(ref.seq)
+	)
 }
 
-parsePileup <- function(f) {
-    #read file
-    pu <- read.delim(f,stringsAsFactors=FALSE,header=FALSE,quote="")
-    colnames(pu) <- c("refname","pos","ref","depth","matches","rqual","mqual")
-    #convert quality scores
-    pu$rqual <- lapply(pu$rqual, function(qstr) as.integer(charToRaw(qstr))-33)
-    pu$mqual <- lapply(pu$mqual, function(qstr) as.integer(charToRaw(qstr))-33)
-    #parse matches
-    re <- "(\\^.)?([\\+-]\\d+)?([\\.,actgnACTGN\\*])(\\$)?"
-    parsed <- global.extract.groups(pu$matches,re)
-    #clean up indels
-    matches <- lapply(parsed, function(m) {
-        indel.starts <- which(m[,2] != "")
-        if (length(indel.starts) > 0) {
-            for (i in 1:length(indel.starts)) {
-                is <- indel.starts[[i]]
-                indel <- m[is,2]
-                l <- as.integer(substr(indel,2,nchar(indel)))
-                val <- paste(substr(indel,1,1),paste(m[is:(is+l-1),3],collapse=""),sep="")
-                m[is,3] <- val
-                if (l > 1) {
-                    m <- m[-((is+1):(is+l-1)),]
-                    indel.starts[(i+1):length(indel.starts)] <- indel.starts[(i+1):length(indel.starts)] -l + 1
-                }
-            }
-        }
-        m[,3]
-    })
-    #split indels from matches
-    indels <- lapply(matches, function(m){
-        idx <- substr(m,1,1) %in% c("+","-")
-        m[idx]
-    })
-    matches <- lapply(matches,function(m){
-        idx <- substr(m,1,1) %in% c("+","-")
-        m[!idx]
-    })
-    pu$matches <- matches
-    pu$indels <- ""
-    pu$indels <- indels
-    pu
-}
+sam2pileup <- function(sam.file,ref.file) {
+	tryCatch({
+		ref.con <- file(ref.file,open="r")
+		ref.seq <- readFASTA(ref.con)[[1]]
 
-simplifyPileup <- function(pu,onlyFwd=FALSE) {
-    piles <- lapply(1:nrow(pu), function(i) {
-        ref <- toupper(pu$ref[[i]])
-        pile <- to.df(do.call(rbind,mapply(
-            function(m,rqual,mqual) {
-                if (onlyFwd && m %in% c(",","a","c","g","t")) {
-                    return(NULL)
-                } else {
-                    p <- 1-(1-10^(-rqual/10))*(1-10^(-mqual/10))
-                    if (m %in% c(",",".")) {
-                        return(list(base=ref,p=p))
-                    } else {
-                        return(list(base=toupper(m),p=p))
-                    }
-                }
-            },
-            m=pu$matches[[i]],
-            rqual=pu$rqual[[i]],
-            mqual=pu$mqual[[i]],
-            SIMPLIFY=FALSE
-        )))
-        #remove absolutes
-        pile$p[pile$p == 0] <- 0.0001
-        pile$p[pile$p == 1] <- 0.999
-        pile
-    })
-    names(piles) <- pu$pos
-    piles
+		sam <- read.delim(sam.file,header=FALSE,stringsAsFactors=FALSE,comment.char="@")
+		colnames(sam) <- c(
+			"cname","flag","rname","pos","mapq","cigar","mrnm","mpos",
+			"isize","seq","qual","tags"
+		)
+
+		flagMasks <- c(
+			multiSegment=0x1, allSegmentsOK=0x2, segmentUnmapped=0x4,
+			nextSegmentUnmapped=0x8, revComp=0x10, nextRevComp=0x20, 
+			firstSegment=0x40, lastSegment=0x80, secondary=0x100, 
+			failQC=0x200, duplicate=0x400, supplementary=0x800
+		)
+		flags <- do.call(rbind,lapply(sam$flag,function(x)bitAnd(x,flagMasks)>0))
+		colnames(flags) <- names(flagMasks)
+		flags <- to.df(flags)
+
+		#CIGAR: S=Soft clip, H=Hard clip, N=Intron skip, M=Match, D=Deletion, I=Insertion, P=Padded
+		cigar <- global.extract.groups(sam$cigar,"(\\d+)([SHNMDIP]{1})")
+
+		pileup <- list(
+			bases=replicate(length(ref.seq),character()),
+			qual=replicate(length(ref.seq),numeric()),
+			ins=replicate(length(ref.seq),character())
+		)
+		for (i in 1:nrow(sam)) {
+
+			if (flags$segmentUnmapped[[i]]) {
+				next
+			}
+
+			qtrack <- as.integer(charToRaw(sam$qual[[i]]))-33
+			read <- to.char.array(sam$seq[[i]])
+			tp <- sam$pos[[i]] #template position
+			rp <- 1 #read position
+			for (cigrow in 1:nrow(cigar[[i]])) {
+				k <- as.integer(cigar[[i]][cigrow,1])
+				op <- cigar[[i]][cigrow,2]
+				if (op=="M") {
+					mstart <- rp
+					while (rp < mstart+k) {
+						pileup$bases[[tp]][[length(pileup$bases[[tp]])+1]] <- read[[rp]]
+						pileup$qual[[tp]][[length(pileup$qual[[tp]])+1]] <- qtrack[[rp]]
+						rp <- rp+1
+						tp <- tp+1
+					}
+				} else if (op=="D") {
+					mstart <- rp
+					for (.dummy in 1:k) {
+						pileup$bases[[tp]][[length(pileup$bases[[tp]])+1]] <- "*"
+						pileup$qual[[tp]][[length(pileup$qual[[tp]])+1]] <- sam$mapq[[i]]
+						tp <- tp+1
+					}
+				} else if (op=="I") {
+					ins.bases <- paste(read[rp:(rp+k-1)],collapse="")
+					pileup$ins[[tp]][[length(pileup$ins[[tp]])+1]] <- ins.bases
+					rp <- rp + k
+				} else if (op %in% c("S","H")) {
+					# tp <- tp + k
+					rp <- rp + k
+				} else {
+					warning("Unsupported cigar character: ",op, sam$cigar[[i]])
+					tp <- tp + k
+				}
+			}
+		}
+		
+	},
+	error=function(e) {
+		logger$fatal(e)
+		stop(e)
+	},
+	finally={
+		if (exists("ref.con") && isOpen(ref.con)) {
+			close(ref.con)
+		}
+	})
+
+	pu <- mapply(function(bases, qual){
+		data.frame(base=bases,p=10^(-qual/10))
+	},bases=pileup$bases,qual=pileup$qual,SIMPLIFY=FALSE)
+	names(pu) <- 1:length(ref.seq)
+	
+	list(pileup=pu,indel.track=pileup$ins)
 }
 
 var.call <- function(piles, ref, indel.track, ref.length, threshold=.05) {
