@@ -567,7 +567,7 @@ call.variants <- function(sam.file, ref.file) {
 			close(con)
 		}
 	})
-	
+
 	pu <- sam2pileup(sam.file,ref.file)
 	var.call(
 		pu$pileup, 
@@ -577,77 +577,43 @@ call.variants <- function(sam.file, ref.file) {
 	)
 }
 
+read.sam <- function(sam.file) {
+	tryCatch({
+		sam.con <- file(sam.file,open="r")
+		lines <- readLines(sam.con)
+		lines <- lines[substr(lines,1,1)!="@"]
+		split <- strsplit(lines,"\t")
+		ncol <- max(sapply(split,length))
+		sam <- do.call(rbind,lapply(split,function(row) c(row,rep(NA,ncol-length(row)))))
+		colnames(sam) <- c(
+			"cname","flag","rname","pos","mapq","cigar","mrnm","mpos",
+			"isize","seq","qual","tags",13:ncol
+		)
+		sam <- to.df(sam)
+		sam$flag <- as.integer(sam$flag)
+		sam$pos <- as.integer(sam$pos)
+		sam$mapq <- as.integer(sam$mapq)
+		sam$mpos <- as.integer(sam$mpos)
+		sam$isize <- as.integer(sam$isize)
+		sam$mapq <- as.integer(sam$mapq)
+		sam
+	},
+	error=function(e) {
+		logger$fatal(e)
+		stop(e)
+	},
+	finally={
+		if (exists("sam.con") && isOpen(sam.con)) {
+			close(sam.con)
+		}
+	})
+	
+}
+
 sam2pileup <- function(sam.file,ref.file) {
 	tryCatch({
 		ref.con <- file(ref.file,open="r")
 		ref.seq <- readFASTA(ref.con)[[1]]
-
-		sam <- read.delim(sam.file,header=FALSE,stringsAsFactors=FALSE,comment.char="@")
-		colnames(sam) <- c(
-			"cname","flag","rname","pos","mapq","cigar","mrnm","mpos",
-			"isize","seq","qual","tags"
-		)
-
-		flagMasks <- c(
-			multiSegment=0x1, allSegmentsOK=0x2, segmentUnmapped=0x4,
-			nextSegmentUnmapped=0x8, revComp=0x10, nextRevComp=0x20, 
-			firstSegment=0x40, lastSegment=0x80, secondary=0x100, 
-			failQC=0x200, duplicate=0x400, supplementary=0x800
-		)
-		flags <- do.call(rbind,lapply(sam$flag,function(x)bitAnd(x,flagMasks)>0))
-		colnames(flags) <- names(flagMasks)
-		flags <- to.df(flags)
-
-		#CIGAR: S=Soft clip, H=Hard clip, N=Intron skip, M=Match, D=Deletion, I=Insertion, P=Padded
-		cigar <- global.extract.groups(sam$cigar,"(\\d+)([SHNMDIP]{1})")
-
-		pileup <- list(
-			bases=replicate(length(ref.seq),character()),
-			qual=replicate(length(ref.seq),numeric()),
-			ins=replicate(length(ref.seq),character())
-		)
-		for (i in 1:nrow(sam)) {
-
-			if (flags$segmentUnmapped[[i]]) {
-				next
-			}
-
-			qtrack <- as.integer(charToRaw(sam$qual[[i]]))-33
-			read <- to.char.array(sam$seq[[i]])
-			tp <- sam$pos[[i]] #template position
-			rp <- 1 #read position
-			for (cigrow in 1:nrow(cigar[[i]])) {
-				k <- as.integer(cigar[[i]][cigrow,1])
-				op <- cigar[[i]][cigrow,2]
-				if (op=="M") {
-					mstart <- rp
-					while (rp < mstart+k) {
-						pileup$bases[[tp]][[length(pileup$bases[[tp]])+1]] <- read[[rp]]
-						pileup$qual[[tp]][[length(pileup$qual[[tp]])+1]] <- qtrack[[rp]]
-						rp <- rp+1
-						tp <- tp+1
-					}
-				} else if (op=="D") {
-					mstart <- rp
-					for (.dummy in 1:k) {
-						pileup$bases[[tp]][[length(pileup$bases[[tp]])+1]] <- "*"
-						pileup$qual[[tp]][[length(pileup$qual[[tp]])+1]] <- sam$mapq[[i]]
-						tp <- tp+1
-					}
-				} else if (op=="I") {
-					ins.bases <- paste(read[rp:(rp+k-1)],collapse="")
-					pileup$ins[[tp]][[length(pileup$ins[[tp]])+1]] <- ins.bases
-					rp <- rp + k
-				} else if (op %in% c("S","H")) {
-					# tp <- tp + k
-					rp <- rp + k
-				} else {
-					warning("Unsupported cigar character: ",op, sam$cigar[[i]])
-					tp <- tp + k
-				}
-			}
-		}
-		
 	},
 	error=function(e) {
 		logger$fatal(e)
@@ -658,6 +624,70 @@ sam2pileup <- function(sam.file,ref.file) {
 			close(ref.con)
 		}
 	})
+
+	# sam <- read.delim(sam.file,header=FALSE,stringsAsFactors=FALSE,skip=3)
+	sam <- read.sam(sam.file)
+
+	flagMasks <- c(
+		multiSegment=0x1, allSegmentsOK=0x2, segmentUnmapped=0x4,
+		nextSegmentUnmapped=0x8, revComp=0x10, nextRevComp=0x20, 
+		firstSegment=0x40, lastSegment=0x80, secondary=0x100, 
+		failQC=0x200, duplicate=0x400, supplementary=0x800
+	)
+	flags <- do.call(rbind,lapply(sam$flag,function(x)bitAnd(x,flagMasks)>0))
+	colnames(flags) <- names(flagMasks)
+	flags <- to.df(flags)
+
+	#CIGAR: S=Soft clip, H=Hard clip, N=Intron skip, M=Match, D=Deletion, I=Insertion, P=Padded
+	cigar <- global.extract.groups(sam$cigar,"(\\d+)([SHNMDIP]{1})")
+
+	pileup <- list(
+		bases=replicate(length(ref.seq),character()),
+		qual=replicate(length(ref.seq),numeric()),
+		ins=replicate(length(ref.seq),character())
+	)
+	for (i in 1:nrow(sam)) {
+
+		if (flags$segmentUnmapped[[i]]) {
+			next
+		}
+
+		qtrack <- as.integer(charToRaw(sam$qual[[i]]))-33
+		read <- to.char.array(sam$seq[[i]])
+		tp <- sam$pos[[i]] #template position
+		rp <- 1 #read position
+		for (cigrow in 1:nrow(cigar[[i]])) {
+			k <- as.integer(cigar[[i]][cigrow,1])
+			op <- cigar[[i]][cigrow,2]
+			if (op=="M") {
+				mstart <- rp
+				while (rp < mstart+k) {
+					pileup$bases[[tp]][[length(pileup$bases[[tp]])+1]] <- read[[rp]]
+					pileup$qual[[tp]][[length(pileup$qual[[tp]])+1]] <- qtrack[[rp]]
+					rp <- rp+1
+					tp <- tp+1
+				}
+			} else if (op=="D") {
+				mstart <- rp
+				for (.dummy in 1:k) {
+					pileup$bases[[tp]][[length(pileup$bases[[tp]])+1]] <- "*"
+					pileup$qual[[tp]][[length(pileup$qual[[tp]])+1]] <- sam$mapq[[i]]
+					tp <- tp+1
+				}
+			} else if (op=="I") {
+				ins.bases <- paste(read[rp:(rp+k-1)],collapse="")
+				pileup$ins[[tp]][[length(pileup$ins[[tp]])+1]] <- ins.bases
+				rp <- rp + k
+			} else if (op %in% c("S","H")) {
+				# tp <- tp + k
+				rp <- rp + k
+			} else {
+				warning("Unsupported cigar character: ",op, sam$cigar[[i]])
+				tp <- tp + k
+			}
+		}
+	}
+		
 
 	pu <- mapply(function(bases, qual){
 		data.frame(base=bases,p=10^(-qual/10))
