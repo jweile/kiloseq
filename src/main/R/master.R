@@ -14,6 +14,7 @@ source("lib/sge2.R")         #SUN Grid Engine
 source("lib/cliargs.R")      #Command-line argument processing
 source("lib/liblogging.R")   #Writing log files
 source("lib/libyogitools.R") #Some handy tools
+source("lib/libyogiseq.R")   #k-mer search
 
 ###
 # Get command line arguments
