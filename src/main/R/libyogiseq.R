@@ -448,6 +448,103 @@ bowtie <- function(fastq.file, db.file,
 	}
 }
 
+library("hash")
+###
+# A class for searching strings against an index of k-mers
+#
+new.kmer.search <- function(k=5) {
+
+	#extract all k-mers from given sting
+	kmers <- function(s) {
+		if (class(s)=="yogiseq") {
+			sapply(1:(length(s)-k+1),function(i) subseq(s,i,i+k-1)$toString())
+		} else {
+			sapply(1:(nchar(s)-k+1),function(i) substr(s,i,i+k-1))
+		}
+	}
+
+	#Fields storing the index (a hash mapping kmers to )
+	.kmer.index <- NULL
+	#
+	.kmer.index.names <- NULL
+
+	build.index <- function(fasta.file) {
+		tryCatch({
+			con <- file(fasta.file, open="r")
+			seqs <- readFASTA(con)
+		},
+		error = function(ex) {
+			# logger$fatal(ex)
+			stop(ex)
+		},
+		finally = {
+			if (exists("con") && isOpen(con)) {
+				close(con)
+			}
+		})
+
+		kmer.index <- hash()
+		kmer.index.names <- sapply(seqs,function(s)s$getID())
+
+		for (j in 1:length(seqs)) {
+			s <- seqs[[j]]
+			kms <- kmers(s)
+			for (i in 1:length(kms)) {
+				kmer.index[[kms[[i]]]] <- c(kmer.index[[kms[[i]]]],j)
+			}
+		}
+
+		index.file <- sub(".fa","_index.rdata",fasta.file)
+		save(kmer.index,kmer.index.names,file=index.file)
+
+		.kmer.index <<- kmer.index
+		.kmer.index.names <<- kmer.index.names
+	}
+
+	load.index <- function(index.file) {
+		load(index.file)
+		.kmer.index <<- kmer.index
+		.kmer.index.names <<- kmer.index.names
+	}
+
+	search <- function(queries,min.hits=3) {
+		sapply(queries, function(s) {
+			# cat(s$getID(),"\n")
+			kms <- kmers(s)
+			kms <- kms[kms %in% keys(.kmer.index)]
+			if (length(kms)==0) {
+				return(NA)
+			} 
+			nhits <- table(do.call(c,values(.kmer.index,kms,simplify=FALSE)))
+			top.nhits <- nhits[nhits >= min.hits & nhits==max(nhits)]
+			if (length(top.nhits) == 1) {
+				.kmer.index.names[[as.integer(names(top.nhits))]]
+			} else {
+				#in case nothing gets over minimum or there are multiple choices
+				NA
+			}
+		})
+	}
+
+	list(
+		build.index=build.index,
+		load.index=load.index,
+		search=search
+	)
+}
+
+# foo <- c(
+#"ACCTCTCTTGCANNNNNNNNNNNNNNNNNNNN",
+# "GGGGGGGGGGGGGNNNNNNNNNNNNNNNNNNN",
+# "AAAGCGCAAGGCNNNNNNNNNNNNNNNNNNNN",
+# "CACGTGGTACNNNNNNNNNNNNNNNNNNNNNN",
+# "CCGTCTGCTAAANNNNNNNNNNNNNNNNNNNN",
+# "GGACGGTCTTAANNNNNNNNNNNNNNNNNNNN",
+# "ACATCCCATAGTNNNNNNNNNNNNNNNNNNNN",
+# "GGGGGGGGGGGGANNNNNNNNNNNNNNNNNNN",
+# "CGCCATGTATCTANNNNNNNNNNNNNNNNNNN",
+# "GCTCATTCTTATNNNNNNNNNNNNNNNNNNNN")
+
 # call.variants <- function(sam.file, ref.file) {
 # 	pileup.file <- sub(".sam$",".pileup",sam.file)
 # 	tryCatch({

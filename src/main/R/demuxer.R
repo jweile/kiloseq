@@ -80,13 +80,24 @@ if (!all(seqnames(tag.read.seq)==seqnames(orf.read.seq))) {
 # STEP 1: Run Bowtie on tag read file against welltag DB and extract well information
 #####
 logger$info("Aligning to well tags...")
+
+#Trunkate sequence information to the 
+tr.seq <- substr(sapply(tag.read.seq,function(x)x$toString()),1,13)
+#K-mer search implemented in libyogiseq.R
+ks <- new.kmer.search()
+kmer.file <- paste(welltag.db,"_index.rdata",sep="")
+ks$load.index(kmer.file)
+well.ids <- ks$search(tr.seq)
+
 #bowtie() function is defined in libyogiseq.R
-tag.read.length <- median(sapply(tag.read.seq,length))
-welltag.sam <- bowtie(tag.read.file,welltag.db,clip3=tag.read.length-13,debug.mode=debug.mode)
+# tag.read.length <- median(sapply(tag.read.seq,length))
+# welltag.sam <- bowtie(tag.read.file,welltag.db,clip3=tag.read.length-13,debug.mode=debug.mode)
 #Extract Well info
 wells <- apply(
-	extract.groups(welltag.sam$rname,"SET_ID=(\\w{1})\\|WELL=(\\w{1}\\d{2})"), 
-	1, 
+	extract.groups(
+		sapply(well.ids,function(x)if(is.na(x))""else x),
+		"SET_ID=(\\w{1})\\|WELL=(\\w{1}\\d{2})"
+	), 1, 
 	function(groups) {
 		# if (!any(is.na(groups))) paste(groups,collapse="_") else NA
 		if (any(is.na(groups))) {
@@ -99,9 +110,9 @@ wells <- apply(
 	}
 )
 
-#sort wells according to order in tag read file
-read.order <- sapply(seqnames(tag.read.seq), function(name) which(welltag.sam$cname == name))
-wells <- wells[read.order]
+# #sort wells according to order in tag read file
+# read.order <- sapply(seqnames(tag.read.seq), function(name) which(welltag.sam$cname == name))
+# wells <- wells[read.order]
 
 #####
 # STEP 2: Extract Barcodes

@@ -75,6 +75,9 @@ dir.create(out.dir, mode="0755")
 # Set up log file
 logger <- new.logger(paste(out.dir,"master.log",sep=""))
 
+# Build k-mer search index
+ks <- new.kmer.search()
+ks$build.index(paste(welltag.db,".fa",sep=""))
 
 
 ###
