@@ -533,17 +533,6 @@ new.kmer.search <- function(k=5) {
 	)
 }
 
-# foo <- c(
-#"ACCTCTCTTGCANNNNNNNNNNNNNNNNNNNN",
-# "GGGGGGGGGGGGGNNNNNNNNNNNNNNNNNNN",
-# "AAAGCGCAAGGCNNNNNNNNNNNNNNNNNNNN",
-# "CACGTGGTACNNNNNNNNNNNNNNNNNNNNNN",
-# "CCGTCTGCTAAANNNNNNNNNNNNNNNNNNNN",
-# "GGACGGTCTTAANNNNNNNNNNNNNNNNNNNN",
-# "ACATCCCATAGTNNNNNNNNNNNNNNNNNNNN",
-# "GGGGGGGGGGGGANNNNNNNNNNNNNNNNNNN",
-# "CGCCATGTATCTANNNNNNNNNNNNNNNNNNN",
-# "GCTCATTCTTATNNNNNNNNNNNNNNNNNNNN")
 
 # call.variants <- function(sam.file, ref.file) {
 # 	pileup.file <- sub(".sam$",".pileup",sam.file)
@@ -738,6 +727,15 @@ sam2pileup <- function(sam.file,ref.file) {
 	#CIGAR: S=Soft clip, H=Hard clip, N=Intron skip, M=Match, D=Deletion, I=Insertion, P=Padded
 	cigar <- global.extract.groups(sam$cigar,"(\\d+)([SHNMDIP]{1})")
 
+	start.stop <- do.call(rbind,lapply(1:nrow(sam),function(i) {
+		if (flags$segmentUnmapped[[i]]) {
+			return(c(start=NA,end=NA))
+		}
+		l <- sum(as.integer(cigar[[i]][cigar[[i]][,2] %in% c("M","D"),1]))
+		c(start=sam$pos[[i]],sam$pos[[i]]+l)
+	}))
+	pcr.dup <- apply(is.na(start.stop),1,any) | duplicated(start.stop)
+
 	pileup <- list(
 		bases=replicate(length(ref.seq),character()),
 		qual=replicate(length(ref.seq),numeric()),
@@ -745,7 +743,7 @@ sam2pileup <- function(sam.file,ref.file) {
 	)
 	for (i in 1:nrow(sam)) {
 
-		if (flags$segmentUnmapped[[i]]) {
+		if (flags$segmentUnmapped[[i]] || pcr.dup[[i]]) {
 			next
 		}
 
