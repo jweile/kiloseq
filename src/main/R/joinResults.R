@@ -52,6 +52,9 @@ with(plates,lapply(1:nrow(plates),function(i) {
 	target.plate <- paste(target.root,"/plate",sprintf("%02d",i),sep="")
 
 	for (well in all.wells) {
+		if (!(well %in% a.well.ids) || !(well %in% b.well.ids)) {
+			next
+		}
 		a.well.dir <- a.well.dirs[which(a.well.ids==well)]
 		b.well.dir <- b.well.dirs[which(b.well.ids==well)]
 		target.well.dir <- paste(target.plate,"/",well,sep="")
