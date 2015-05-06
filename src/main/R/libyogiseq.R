@@ -736,6 +736,9 @@ sam2pileup <- function(sam.file,ref.file) {
 	}))
 	pcr.dup <- apply(is.na(start.stop),1,any) | duplicated(start.stop)
 
+	out.sam <- sub("/[^/]+\\.sam$","/nodup.sam",sam.file)
+	write.table(sam[!pcr.dup,],out.sam,sep="\t",quote=FALSE,row.names=FALSE)
+
 	pileup <- list(
 		bases=replicate(length(ref.seq),character()),
 		qual=replicate(length(ref.seq),numeric()),
