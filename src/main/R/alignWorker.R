@@ -81,6 +81,10 @@ doAlign <- function() {
 		sep=",",quote=FALSE,row.names=FALSE
 	)
 
+	depth <- variants$depth
+	vcalls <- vcalls[vcalls$freq > .25,]
+	vcalls <- vcalls[order(vcalls$pos),]
+	
 	if (nrow(vcalls)==0) {
 		return(cbind(bc.info,data.frame(
 			al.rate=al.rate,
@@ -90,9 +94,6 @@ doAlign <- function() {
 		)))
 	}
 
-	depth <- variants$depth
-	vcalls <- vcalls[vcalls$freq > .25,]
-	vcalls <- vcalls[order(vcalls$pos),]
 	mutstr <- paste(sapply(1:nrow(vcalls),function(i) paste(vcalls[i,1],vcalls[i,2],vcalls[i,3],sep="")),collapse=",")
 	# mutstr <- toupper(paste(apply(vcalls[,1:3],1,paste,collapse=""),collapse=","))
 	if (any(vcalls$pos < orf.pos$from | vcalls$pos > orf.pos$to)) {
