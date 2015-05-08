@@ -35,6 +35,9 @@ orf.pos <- orf.pos[orf.pos$name=="ORF",c("from","to")]
 bc.info <- read.csv(paste(dir.name,"barcodes.csv",sep=""),stringsAsFactors=FALSE)
 bc.info <- bc.info[bc.info$freq>.25,]
 
+if (nrow(bc.info)==0) {
+	bc.info <- cbind(seq=NA,freq=NA)
+}
 
 doAlign <- function() {
 	#Alignment
@@ -84,7 +87,7 @@ doAlign <- function() {
 	depth <- variants$depth
 	vcalls <- vcalls[vcalls$freq > .25,]
 	vcalls <- vcalls[order(vcalls$pos),]
-	
+
 	if (nrow(vcalls)==0) {
 		return(cbind(bc.info,data.frame(
 			al.rate=al.rate,
