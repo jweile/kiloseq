@@ -14,6 +14,7 @@ a.pattern <- getArg("patternA",default="Plate(\\d+)")
 b.root <- getArg("rootB",default="kiloseq_2015-03-23/ube2i-emlr-ad_2015-03-24_17-12-23")
 b.pattern <- getArg("patternB",default="Plate-(\\d+)")
 target.root <- getArg("target",default="ks_joint/ube2i-emlr-ad")
+mql <- as.integer(getArg("maxQueue",default=80))
 
 subdirs <- function(d) {
 	fs <- list.files(d,full.name=TRUE)
@@ -38,7 +39,7 @@ all.wells <- apply(
 	function(x)paste(x[[1]],"_",x[[2]],sprintf("%02d",as.numeric(x[[3]])),sep="")
 )
 
-sge <- new.sge(max.queue.length=60, logger=logger, debug=FALSE)
+sge <- new.sge(max.queue.length=mql, logger=logger, debug=FALSE)
 
 target.well.dirs <- character(0)
 
