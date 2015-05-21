@@ -9,15 +9,18 @@ options(stringsAsFactors=FALSE)
 source("../src/main/R/libyogitools.R") #Helper functions
 source("../src/main/R/libyogiseq.R")	#FASTA parser
 
-con <- file("ube2i-pdonr.fa",open="r")
+con <- file("ube2i-ad.fa",open="r")
+# con <- file("ube2i-pdonr.fa",open="r")
 ref.fa <- readFASTA(con)[[1]]
 close(con)
 
-ref.bed <- read.delim("ube2i-pdonr.bed",header=FALSE)
+ref.bed <- read.delim("ube2i-ad.bed",header=FALSE)
+# ref.bed <- read.delim("ube2i-pdonr.bed",header=FALSE)
 colnames(ref.bed) <- c("ref","from","to","feature")
 
 
-calls <- read.csv("calls.csv")
+calls <- read.csv("ube2i-bplr-ad_calls.csv")
+# calls <- read.csv("calls.csv")
 
 joint.calls <- do.call(rbind,tapply(1:nrow(calls),paste(calls$set,calls$well,sep="-"),function(is) {
 	common <- calls[min(is),1:6]
@@ -46,7 +49,8 @@ joint.calls <- do.call(rbind,tapply(1:nrow(calls),paste(calls$set,calls$well,sep
 
 },simplify=FALSE))
 
-top.calls <- calls[tapply(1:nrow(calls),paste(calls$set,calls$well,sep="-"),min),]
+top.calls <- calls[tapply(1:nrow(calls),paste(calls$plate,calls$well,sep="-"),min),]
+# top.calls <- calls[tapply(1:nrow(calls),paste(calls$set,calls$well,sep="-"),min),]
 
 pop.vs.snp <- function(.calls, ref.fa, ref.bed) {
 	codon.starts <- seq(ref.bed$from,ref.bed$to,3)
@@ -60,11 +64,12 @@ pop.vs.snp <- function(.calls, ref.fa, ref.bed) {
 	}
 	muts <- strsplit(.calls$call,",")
 	pvs <- to.df(do.call(rbind,lapply(muts, function(ms) {
-		if (length(ms)==1) {
-			if (ms %in% c("No alignment!","Low coverage!","WT","Frameshift!","Corrupt!","Crossover!")) {
-				return(list(pop=NA,snp=NA,comment=ms))
+		# if (length(ms)==1) {
+			# if (ms %in% c("No alignment!","Low coverage!","WT","Frameshift!","Corrupt!","Crossover!","Duplicated BC")) {
+			if (regexpr("No|Low|WT|Corr|Cross|Dupl",ms[[1]])>0) {
+				return(list(pop=NA,snp=NA,comment=ms[[1]]))
 			}
-		}
+		# }
 		if (regexpr("Frameshift",ms[[1]])>0) {
 			return(list(pop=NA,snp=NA,comment="Frameshift!"))
 		}
@@ -97,9 +102,9 @@ calc.nc.census <- function(.calls,ref.fa,ref.bed) {
 			sub("_R1","",.calls[i,"set"])
 		}
 	})
-	labels <- c("No alignment!","Low coverage!","Crossover!","Corrupt!","Frameshift!","Stop!","WT",1:14)
+	labels <- c("No alignment!","Low coverage!","Crossover!","Duplicated BC","Corrupt!","Frameshift!","Stop!","WT",1:14)
 	census <- do.call(rbind,tapply(1:length(subsets),subsets,function(is) {
-		counts <- c(rep(0,7),rep(list(list(pop=0,snp=0)),14))
+		counts <- c(rep(0,8),rep(list(list(pop=0,snp=0)),14))
 		names(counts) <- labels
 		for (i in is) {
 			if (is.na(muts$pop[[i]])) {
@@ -348,6 +353,18 @@ draw.census <- function(census,filename,nc=FALSE) {
 	par(op)
 	dev.off()
 }
+
+bc.map <- hash()
+for (i in 1:nrow(joint.calls)) {
+	bc <- joint.calls$seq[[i]]
+	if (bc=="") {
+		next
+	}
+	bc.map[[bc]] <- c(bc.map[[bc]],i)
+}
+dup.bc <- keys(bc.map)[sapply(keys(bc.map),function(k)length(bc.map[[k]]))>1]
+dup.bc.idxs <- values(bc.map,dup.bc)
+joint.calls$call[unique(unlist(dup.bc.idxs))] <- "Duplicated BC"
 
 muts <- global.extract.groups(joint.calls$call,"([ACTG]\\d+[ACTG])")
 mut.map <- hash()
