@@ -4,7 +4,10 @@
 # 	cbind(set="ube2i-bplr-ad",read.csv("ube2i-bplr-ad/calls.csv",stringsAsFactors=FALSE)),
 # 	cbind(set="ube2i-bplr-db",read.csv("ube2i-bplr-db/calls.csv",stringsAsFactors=FALSE)),
 # 	cbind(set="ube2i-emlr-ad",read.csv("ube2i-emlr-ad/calls.csv",stringsAsFactors=FALSE)),
-# 	cbind(set="ube2i-emlr-comp",read.csv("ube2i-emlr-comp/calls.csv",stringsAsFactors=FALSE))
+# 	cbind(set="ube2i-emlr-comp",read.csv("ube2i-emlr-comp/calls.csv",stringsAsFactors=FALSE)),
+# 	cbind(set="ube2i-bplr-comp",read.csv("ube2i-bplr-comp_may13/calls.csv",stringsAsFactors=FALSE)),
+# 	cbind(set="ncs1-bplr-db",read.csv("ncs1-db_may13/calls.csv",stringsAsFactors=FALSE)),
+# 	cbind(set="ube2i-bplr-db-nopool",read.csv("ube2i-db-nopool_may13/calls.csv",stringsAsFactors=FALSE))
 # )
 # calls$call[which(regexpr("NA",calls$call)>0)] <- "WT"
 # write.table(calls,"all_calls.csv",sep=",",row.names=FALSE)
@@ -19,13 +22,46 @@ options(stringsAsFactors=FALSE)
 source("../src/main/R/libyogitools.R") #Helper functions
 source("../src/main/R/libyogiseq.R")	#FASTA parser
 
+cat("Reading input\n")
 calls <- read.csv("all_calls.csv")
-top.calls <- calls[tapply(1:nrow(calls),paste(calls$plate,calls$well,sep="-"),min),]
+# calls <- read.csv("poptweak_calls.csv")
+top.calls <- calls[tapply(1:nrow(calls),paste(calls$set,calls$plate,calls$well,sep="-"),min),]
 
-set.names <- unique(top.calls$set)
+
+# joint.calls <- do.call(rbind,tapply(1:nrow(calls),paste(calls$set,calls$well,sep="-"),function(is) {
+# 	common <- calls[min(is),1:6]
+# 	if (any(regexpr("No alignment!",calls[is,"call"]) > 0)) {
+# 		return(cbind(common,call="No alignment!"))
+# 	}
+# 	if (any(regexpr("Low coverage!",calls[is,"call"]) > 0)) {
+# 		return(cbind(common,call="Low coverage!"))
+# 	}
+# 	if (all(regexpr("WT",calls[is,"call"]) > 0)) {
+# 		return(cbind(common,call="WT"))
+# 	}
+# 	top.is <- is[which(calls[is,"share"] > .25)]
+# 	if (length(top.is)==0) {
+# 		return(cbind(common,call="WT"))
+# 	}
+# 	top.calls <- calls[top.is,"call"]
+# 	if (any(regexpr("Frameshift",top.calls) > 0)) {
+# 		return(cbind(common,call="Frameshift"))
+# 	}
+# 	if (any(regexpr("Corrupt",top.calls) > 0)) {
+# 		return(cbind(common,call="Corrupt"))
+# 	}
+# 	muts <- unlist(global.extract.groups(top.calls,"([ACGT]\\d+[ACGT\\*-\\+])"))
+# 	return(cbind(common,call=paste(muts,collapse=",")))
+
+# },simplify=FALSE))
+# top.calls <- joint.calls
+
+
+set.names <- unique(calls$set)
 
 ref.seqs <- lapply(
-	c("sumo1gg-db.fa","ube2i-ad.fa","ube2i-db.fa","ube2i-ad.fa","ube2i-comp.fa"), 
+	c("sumo1gg-db.fa","ube2i-ad.fa","ube2i-db.fa","ube2i-ad.fa","ube2i-comp.fa","ube2i-comp.fa","ncs1-db.fa","ube2i-db.fa"), 
+	# rep("ube2i-pdonr.fa",6),
 	function(fn) {
 		con <- file(fn,open="r")
 		ref.fa <- readFASTA(con)[[1]]
@@ -35,7 +71,8 @@ ref.seqs <- lapply(
 )
 
 ref.beds <- do.call(rbind,lapply(
-	c("sumo1gg-db.bed","ube2i-ad.bed","ube2i-db.bed","ube2i-ad.bed","ube2i-comp.bed"), 
+	c("sumo1gg-db.bed","ube2i-ad.bed","ube2i-db.bed","ube2i-ad.bed","ube2i-comp.bed","ube2i-comp.bed","ncs1-db.bed","ube2i-db.bed"), 
+	# rep("ube2i-pdonr.bed",6),
 	function(fn) {
 		ref.bed <- read.delim(fn,header=FALSE)
 		colnames(ref.bed) <- c("ref","from","to","feature")
@@ -43,7 +80,7 @@ ref.beds <- do.call(rbind,lapply(
 	}
 ))
 
-
+top.calls[top.calls$set=="ncs1-bplr-db",c("seq","freq")] <- NA
 
 ###
 #DEAL WITH DUPLICATED BARCODES
@@ -60,7 +97,11 @@ dup.bc <- keys(bc.map)[sapply(keys(bc.map),function(k)length(bc.map[[k]]))>1]
 dup.bc.idxs <- values(bc.map,dup.bc)
 #For each duplicated barcode identify the most useful clone and only retain
 #that one
+cat("Detecting barcode duplications\n")
+pb <- txtProgressBar(max=length(dup.bc.idxs),style=3)
+pr <- 0
 invisible(lapply(dup.bc.idxs,function(idxs) {
+	setTxtProgressBar(pb,pr <<- pr+1)
 	if (length(idxs) > 6) {#BC crossover
 		top.calls$call[idxs] <<- "Duplicated BC"
 		return()
@@ -78,10 +119,14 @@ invisible(lapply(dup.bc.idxs,function(idxs) {
 	}
 	top.calls$call[bad.idxs] <<- "Duplicated BC"
 }))
+close(pb)
 
 ###
 #DEAL WITH PCR CROSSOVER
 #
+cat("Detecting PCR Crossovers\n")
+top.calls$aa.calls <- NA
+top.calls$x.over <- ""
 for (set.name in set.names) {
 
 	set.idxs <- which(top.calls$set==set.name)
@@ -99,18 +144,19 @@ for (set.name in set.names) {
 		}
 	}
 	ffs <- keys(mut.map)[sapply(keys(mut.map),function(k)length(mut.map[[k]])>20)]
-	overlap.idxs <- Reduce(union,lapply(1:length(ffs), function(i) {
-		do.call(c,lapply(1:length(ffs), function(j) {
-			if (j > i) {
-				intersection <- intersect(mut.map[[ffs[[i]]]],mut.map[[ffs[[j]]]])
-				if (length(intersection) > 1) {
-					intersection
-				}
-			} else NULL
+	if (length(ffs) > 0) {
+		overlap.idxs <- Reduce(union,lapply(1:length(ffs), function(i) {
+			do.call(c,lapply(1:length(ffs), function(j) {
+				if (j > i) {
+					intersection <- intersect(mut.map[[ffs[[i]]]],mut.map[[ffs[[j]]]])
+					if (length(intersection) > 1) {
+						intersection
+					}
+				} else NULL
+			}))
 		}))
-	}))
-	top.calls$call[overlap.idxs] <- paste("X-Over:",top.calls$call[overlap.idxs])
-
+		top.calls$x.over[overlap.idxs] <- "X-over" #paste("X-Over:",top.calls$call[overlap.idxs])
+	}
 }
 
 
@@ -176,7 +222,7 @@ translate.calls <- function(.calls, ref.fa, ref.bed, aa.table="codontable.txt") 
 	})
 }
 
-top.calls$aa.calls <- NA
+cat("Translating mutations\n")
 for (set.idx in 1:length(set.names)) {
 	set.name <- set.names[[set.idx]]
 	ref.seq <- ref.seqs[[set.idx]]
@@ -227,8 +273,8 @@ pop.vs.snp <- function(.calls, ref.fa, ref.bed) {
 
 calc.nc.census <- function(.calls,ref.fa,ref.bed) {
 	muts <- pop.vs.snp(.calls, ref.fa, ref.bed)
-	labels <- c("No alignment!","Low coverage!","X-Over","Duplicated BC","Corrupt","Frameshift","Stop","WT",1:14)
-	counts <- c(rep(0,8),rep(list(list(pop=0,snp=0)),14))
+	labels <- c("No alignment!","Low coverage!","X-Over","Duplicated BC","Corrupt","Frameshift","Stop","WT",1:16)
+	counts <- c(rep(0,8),rep(list(list(pop=0,snp=0)),16))
 	names(counts) <- labels
 	for (i in 1:nrow(muts)) {
 		if (is.na(muts$pop[[i]])) {
@@ -251,6 +297,7 @@ calc.nc.census <- function(.calls,ref.fa,ref.bed) {
 	out
 }
 
+cat("Compiling NC-wise census\n")
 nc.census <- to.df(do.call(rbind,lapply(1:length(set.names), function(set.idx) {
 	set.name <- set.names[[set.idx]]
 	ref.seq <- ref.seqs[[set.idx]]
@@ -258,7 +305,7 @@ nc.census <- to.df(do.call(rbind,lapply(1:length(set.names), function(set.idx) {
 	.calls <- top.calls[top.calls$set==set.name,]
 	calc.nc.census(.calls,ref.seq,ref.bed)
 })))
-colnames(nc.census) <- c("No alignment!","Low coverage!","X-Over","Duplicated BC","Corrupt","Frameshift","Stop","WT",1:14)
+colnames(nc.census) <- c("No alignment!","Low coverage!","X-Over","Duplicated BC","Corrupt","Frameshift","Stop","WT",1:16)
 
 
 draw.census <- function(census,filename,nc=FALSE) {
@@ -394,7 +441,7 @@ calc.aa.census <- function(.calls,ref.fa,ref.bed) {
 	out
 }
 
-
+cat("Compiling AA-wise census\n")
 aa.census <- to.df(do.call(rbind,lapply(1:length(set.names), function(set.idx) {
 	set.name <- set.names[[set.idx]]
 	ref.seq <- ref.seqs[[set.idx]]
@@ -530,6 +577,7 @@ plotMutCoverage <- function(.calls, ref.seq, ref.bed, main="") {
 	axis(4,at=0:5+.5,labels=c("0",paste(bottoms,tops,sep="-"),"wt"),tick=FALSE)
 }
 
+cat("Plotting positional coverage\n")
 pdf("positionalCoverage.pdf",width=11,height=4)
 lapply(1:length(set.names), function(set.idx) {
 	set.name <- set.names[[set.idx]]
@@ -539,4 +587,7 @@ lapply(1:length(set.names), function(set.idx) {
 	plotMutCoverage(.calls,ref.seq,ref.bed,set.name)
 })
 dev.off()
+
+cat("Done!\n")
+
 
