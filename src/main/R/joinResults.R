@@ -50,7 +50,7 @@ with(plates,lapply(1:nrow(plates),function(i) {
 	b.well.dirs <- subdirs(b.dir[[i]])
 	b.well.dirs <- b.well.dirs[regexpr("[A-D]_[A-H]\\d{2}",b.well.dirs)>0]
 	b.well.ids <- substr(b.well.dirs,nchar(b.well.dirs)-4,nchar(b.well.dirs))
-	target.plate <- paste(target.root,"/plate",sprintf("%02d",i),sep="")
+	target.plate <- paste(target.root,"/plate",sprintf("%02d",plate.num[[i]]),sep="")
 
 	for (well in all.wells) {
 		if (!(well %in% a.well.ids) || !(well %in% b.well.ids)) {
