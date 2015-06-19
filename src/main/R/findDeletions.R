@@ -39,7 +39,7 @@ for (i in 1:length(dir.chunks)) {
 			paste("dirs=",target.well.dirs,sep=""),
 			paste("orfDB=",orf.db,sep=""),
 			paste("outDir=",out.dir,sep=""),
-			paste("id=",id,"sep=")
+			paste("id=",id,sep="")
 		)
 	)
 
