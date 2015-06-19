@@ -172,8 +172,8 @@ q2c <- function(x) {
 	q <- which(LETTERS==substr(x,1,1))
 	r <- which(LETTERS==substr(x,3,3))
 	c <- as.numeric(substr(x,4,nchar(x)))
-	.r <- r*2 - q%%2
-	.c <- c*2 - (q<3)
+	.r <- r*2 - (q<3)
+	.c <- c*2 - q%%2
 	paste(LETTERS[[.r]],sprintf("%02d",.c),sep="")
 }
 c2q <- function(x) {
