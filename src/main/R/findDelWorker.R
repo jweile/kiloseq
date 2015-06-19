@@ -1,4 +1,3 @@
-
 source("lib/liblogging.R")   #Logger
 source("lib/cliargs.R")      #Command-line argument processing
 source("lib/libyogitools.R") #Helper functions
@@ -13,20 +12,23 @@ ref.seq <- readFASTA(con)[[1]]
 close(con)
 ref.length <- length(ref.seq)
 
-id <- getArg("id",required=TRUE)
-logger <- new.logger(paste(out.dir,"/",id,".log",sep="")
-
-dirsArg <- getArg("dirs",required=TRUE)
 
 out.dir <- getArg("outDir",required=TRUE)
 
+id <- getArg("id",required=TRUE)
+logger <- new.logger(paste(out.dir,"/",id,".log",sep=""))
+
+logger$info(paste("Start",id))
+
+dirsArg <- getArg("dirs",required=TRUE)
 dirs <- strsplit(dirsArg,",")[[1]]
 sam.files <- paste(dirs,"OR.sam",sep="/")
 
-chunk.info <- do.call(rbind,strsplit(dir.chunk,"/"))
+chunk.info <- do.call(rbind,strsplit(dirs,"/"))
 chunk.info <- chunk.info[,-1]
 colnames(chunk.info) <- c("set","plate","well")
 
+logger$info("Reading SAM files")
 ds <- lapply(sam.files, function(sam.file) {
 	pu <- sam2pileup(sam.file,orf.fa)
 	bases <- c("A","C","G","T","*")
@@ -39,6 +41,7 @@ ds <- lapply(sam.files, function(sam.file) {
 	sapply(as.character(1:ref.length), function(pos) if (pos %in% names(d)) d[[pos]] else 0)
 })
 
+logger$info("Scanning for deletions")
 
 border.detect <- function(d) sapply(1:length(d), function(i){
 	left <- if (i < 10) i-1 else 10
@@ -58,4 +61,4 @@ out <- cbind(chunk.info,large.indel=hits)
 
 write.table(out,paste(out.dir,"/",id,".csv",sep=""),sep=",",row.names=FALSE)
 
-
+logger$info("Done!")
