@@ -211,7 +211,7 @@ all.calls <- do.call(rbind,lapply(1:nrow(top.clusters), function(cluster.idx) {
 		purge=FALSE, parse=FALSE, header=TRUE, short=FALSE,
 		debug.mode=debug.mode
 	)
-	#Look into SAM file to compute alignment effeciency
+	#Look into SAM file to compute alignment efficiency
 	sam <- read.delim(sam.file,stringsAsFactors=FALSE,comment.char="@",header=FALSE)
 	colnames(sam) <- c(
 		"cname","flag","rname","pos","mapq","cigar","mrnm","mpos",

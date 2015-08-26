@@ -119,8 +119,10 @@ wells <- apply(
 #####
 if (use.barcodes) {
 	seqs <- sapply(tag.read.seq,function(s)s$toString())
+	n <- nchar(dntag.snippet)
 	barcode.seq <- mapply(function(m,s) {
-		if (m > 0) subseq(s,m+nchar(dntag.snippet),length(s)) else NA
+		# if (m > 0) subseq(s,m+nchar(dntag.snippet),length(s)) else NA
+		if (m > 0) subseq(s,m+n,m+n+25) else NA
 	},m=regexpr(dntag.snippet, seqs),s=tag.read.seq)
 }
 
