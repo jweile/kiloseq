@@ -1,1 +1,1 @@
-Installation and execution manual [here].(http://dalai.mshri.on.ca/~jweile/projects/kiloseq/doc/manual.html)
+Installation and execution manual [here](http://dalai.mshri.on.ca/~jweile/projects/kiloseq/doc/manual.html).
